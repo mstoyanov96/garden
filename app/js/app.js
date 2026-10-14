@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.7';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.8';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -503,10 +503,10 @@
       [100, 75, 50, 25, 10, 5].map(function (p) {
         return '<button class="' + (harvestFill === p ? 'active' : '') + '" data-action="hfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
       }).join('') + '</div>' +
-      '<div class="stepper" style="margin-top:8px">' +
-      '<button data-action="hfillstep:-5">−5%</button>' +
-      '<span class="val" style="min-width:64px">' + harvestFill + '%</span>' +
-      '<button data-action="hfillstep:5">+5%</button>' +
+      '<div class="fillstep">' +
+      '<button class="fillstep-btn" data-action="hfillstep:-5"><span>−</span><small>5%</small></button>' +
+      '<span class="fillstep-val">' + harvestFill + '%</span>' +
+      '<button class="fillstep-btn" data-action="hfillstep:5"><span>+</span><small>5%</small></button>' +
       '</div></div>';
   }
 
@@ -994,7 +994,10 @@
 
       case 'tree': treeHarvestOpen = ''; treeDetailsOpen = false; go('tree', parts[1]); break;
       case 'treeedit': sheetTreeEdit(parts[1]); break;
-      case 'treeharvest': treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]); render(); if (treeHarvestOpen) scrollToEl('treeHarvestForm'); break;
+      case 'treeharvest':
+        treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
+        if (treeHarvestOpen) { if (!harvestDraft[treeHarvestOpen]) harvestDraft[treeHarvestOpen] = {}; if (harvestDraft[treeHarvestOpen]._count == null) harvestDraft[treeHarvestOpen]._count = 1; }
+        render(); if (treeHarvestOpen) scrollToEl('treeHarvestForm'); break;
       case 'treedetails': treeDetailsOpen = !treeDetailsOpen; render(); if (treeDetailsOpen) scrollToEl('treeDetails'); break;
       case 'treeharvestcancel': treeHarvestOpen = ''; render(); break;
       case 'savetreeharvestinline': saveTreeHarvestInline(parts[1]); break;
