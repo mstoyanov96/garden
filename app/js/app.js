@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1373,32 +1373,22 @@
 
   // ---- Offline indicator -------------------------------------------------
   var offlineTimer = null;
-  var offlineStrikes = 0;   // искаме 2 последователни провала, преди да покажем банера
   function setOffline(off) {
     document.body.classList.toggle('offline', !!off);
-    if (off && !offlineTimer) offlineTimer = setInterval(probeOnline, 8000); // повтаряй докато се върне мрежата
+    if (off && !offlineTimer) offlineTimer = setInterval(refreshOnline, 10000); // повтаряй докато се върне мрежата
     if (!off && offlineTimer) { clearInterval(offlineTimer); offlineTimer = null; }
   }
-  function probeOnline() {
-    // Не се доверяваме на navigator.onLine (на iOS PWA често лъже) — правим истинска заявка.
-    // Без cache:'no-store' (чупи fetch в инсталирано PWA на iOS); busting чрез ?ping.
-    var ctrl = ('AbortController' in window) ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
-    function fail() {
-      offlineStrikes++;
-      if (offlineStrikes >= 2) setOffline(true);
-      else setTimeout(probeOnline, 2500); // потвърди с втори опит, преди банера
-    }
-    fetch('manifest.webmanifest?ping=' + Date.now(), ctrl ? { signal: ctrl.signal } : {})
-      .then(function (r) {
-        if (timer) clearTimeout(timer);
-        if (r && r.ok) { offlineStrikes = 0; setOffline(false); } else fail();
-      })
-      .catch(function () { if (timer) clearTimeout(timer); fail(); });
+  function refreshOnline() {
+    // Ако браузърът казва, че има мрежа (надеждно на Android) — скрий банера веднага.
+    if (navigator.onLine) { setOffline(false); return; }
+    // Браузърът твърди, че няма мрежа — потвърди с реална заявка, преди да покажем банера.
+    fetch('manifest.webmanifest?ping=' + Date.now())
+      .then(function (r) { setOffline(!(r && r.ok)); })
+      .catch(function () { setOffline(true); });
   }
-  ['online', 'offline', 'pageshow', 'focus'].forEach(function (ev) { window.addEventListener(ev, probeOnline); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) probeOnline(); });
-  setTimeout(probeOnline, 1500); // изчакай service worker-а да се активира преди първата проверка
+  ['online', 'offline', 'pageshow', 'focus'].forEach(function (ev) { window.addEventListener(ev, refreshOnline); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshOnline(); });
+  refreshOnline();
 
   // ---- Service worker + обновяване --------------------------------------
   var swReg = null;
