@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.9';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.11.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -14,9 +14,13 @@
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
   var treeHarvestOpen = '';   // id на дърво с отворена вградена форма за събиране
   var treeDetailsOpen = false; // показани ли са подробните данни за дървото
-  var careScope = 'all';    // 'all' | 'rows' | 'tree' — обхват на грижата
+  var careScope = 'all';    // 'all' | 'rows' | 'tree' | 'trees' — обхват на грижата
   var careRows = [];        // избрани редици (букви) когато careScope === 'rows'
   var careTreePreset = '';  // предварително избрано дърво при грижа от профила на дърво
+  var careTrees = [];       // избрани дървета (id) когато careScope === 'trees' (от картата)
+  var mapSelect = false;    // режим на избор на няколко дървета върху картата
+  var mapSelected = [];     // id на избраните дървета върху картата
+  var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
 
@@ -131,11 +135,42 @@
     n = Math.round(((n || 0) + Number.EPSILON) * 1000) / 1000;
     return n.toFixed(3).replace(/\.?0+$/, '');
   }
+  // еталонна кофа за броене („кофа за сирене“) — спрямо нея се смятат „кофи днес“
+  function refBucketKg() {
+    var b = bucket('buc_cheese') || (db.settings.buckets && db.settings.buckets[0]);
+    return b && b.greenKg ? b.greenKg : 10;
+  }
+  // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
+  function bucketsEq(kg) { return (kg || 0) / refBucketKg(); }
 
   // =======================================================================
   //  NAVIGATION
   // =======================================================================
-  function go(name, param) { if (route.name === 'walk' && name !== 'walk') stopWalk(); route = { name: name, param: param || null }; render(); window.scrollTo(0, 0); }
+  function go(name, param) {
+    if (route.name === 'walk' && name !== 'walk') stopWalk();
+    if (name !== 'home' && mapSelected.length) clearMapSelect();
+    route = { name: name, param: param || null };
+    // добавя запис в историята, за да работи бутонът „назад“ / суайп жестът на iPhone вътре в приложението
+    try { history.pushState({ route: route }, '', '#' + name + (param ? '/' + encodeURIComponent(param) : '')); } catch (err) {}
+    render(); window.scrollTo(0, 0);
+  }
+
+  // назад през историята (телефонен бутон „назад“ и iOS суайп правят същото чрез popstate)
+  function goBack() {
+    if (isSheetOpen()) { closeSheet(); return; }
+    if (history.length > 1) history.back(); else go('home');
+  }
+  function isSheetOpen() { var s = el('sheet'); return !!(s && s.classList.contains('open')); }
+
+  window.addEventListener('popstate', function (e) {
+    // ако има отворен лист (sheet) — затвори него и остани на същия изглед
+    if (isSheetOpen()) { closeSheet(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
+    var st = e.state && e.state.route;
+    if (route.name === 'walk') stopWalk();
+    if (mapSelected.length) clearMapSelect();
+    route = st || { name: db.currentUserId ? 'home' : 'login', param: null };
+    render(); window.scrollTo(0, 0);
+  });
 
   // =======================================================================
   //  RENDER
@@ -161,6 +196,7 @@
     app.innerHTML = body + bottomNav();
     bind();
     if (route.name === 'walk') startWalk();
+    if (route.name === 'home') { initMapSelect(); renderMapBar(); }
   }
 
   // ---- Topbar ------------------------------------------------------------
@@ -173,7 +209,7 @@
     opts = opts || {};
     var m = me();
     var left = opts.back
-      ? '<button class="back" data-action="' + esc(opts.back) + '">‹</button>'
+      ? '<button class="back" data-action="back">‹</button>'
       : '<span class="brand">' + logoSVG() + '</span>';
     return '<div class="topbar">' + left +
       (opts.back ? '<b style="font-size:19px">' + esc(title) + '</b>' : '<b style="font-size:19px">' + esc(title) + '</b>') +
@@ -228,13 +264,13 @@
     var counts = { green: 0, yellow: 0, red: 0 };
     db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) { counts[t.health]++; });
     var today = DB.todayISO();
-    var todayKg = 0, todayBuckets = 0;
+    var todayKg = 0;
     activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; })
-      .forEach(function (e) { todayKg += eventKg(e); todayBuckets += eventBuckets(e); });
+      .forEach(function (e) { todayKg += eventKg(e); });
 
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row">' +
-      '<div class="stat green"><b>' + todayBuckets + '</b><small>кофи днес</small></div>' +
+      '<div class="stat green"><b>' + fmtKg(bucketsEq(todayKg)) + '</b><small>кофи днес</small></div>' +
       '<div class="stat blue"><b>' + fmtKg(todayKg) + '</b><small>кг (зелени) днес</small></div>' +
       '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
       '</div>' +
@@ -251,6 +287,7 @@
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
         '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' +
         '</div>') +
+      (editMode ? '' : '<div class="map-hint">💡 Задръж пръст върху дърво, за да избереш няколко наведнъж (за торене/поливане).</div>') +
       '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode) + '</div>' +
       '<div class="legend">' +
       '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
@@ -332,7 +369,8 @@
           var v = variety(t.varietyId);
           var small = v && v.size === 'small' ? ' small-badge' : '';
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
-          html += '<div class="tree-cell' + small + '" id="cell_' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
+          var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
+          html += '<div class="tree-cell' + small + sel + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
             '<div class="svgwrap">' + treeSVG(t.health) + '</div><span class="code">' + esc(t.code) + '</span></div>';
         } else if (edit && !isReserved) {
           html += '<div class="cell-empty" data-action="addtree:' + rk + ':' + c + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2">＋</div>';
@@ -436,7 +474,6 @@
     var today = DB.todayISO();
     var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; });
     var todayKg = todayEvs.reduce(function (s, e) { return s + eventKg(e); }, 0);
-    var todayBuckets = todayEvs.reduce(function (s, e) { return s + eventBuckets(e); }, 0);
 
     var body = topbar('Събиране на орехи', { back: 'nav:home' }) + '<div class="content">' +
       '<div class="seg">' +
@@ -478,7 +515,7 @@
 
     body += '<div class="card mt" style="display:flex;justify-content:space-between;align-items:center">' +
       '<div><small class="muted">Днес събрано общо</small><div style="font-size:20px;font-weight:800">' +
-      fmtKg(todayKg) + ' кг · ' + todayBuckets + ' кофи</div></div>' +
+      fmtKg(todayKg) + ' кг · ' + fmtKg(bucketsEq(todayKg)) + ' кофи</div></div>' +
       '<button class="btn sm" data-action="savehcurrent">Запази</button></div>';
 
     body += '<button class="btn mt" data-action="savehcurrent">💾 Запази събраното</button>';
@@ -499,6 +536,8 @@
 
   // чипове за запълване на кофата (%) — общо за събиране/бърз режим
   function fillChips() {
+    var fb = bucket(harvestBucket);
+    var oneKg = fb ? fb.greenKg * harvestFill / 100 : 0;
     return '<div class="field"><label>Колко пълни бяха кофите?</label><div class="rowfilter">' +
       [100, 75, 50, 25, 10, 5].map(function (p) {
         return '<button class="' + (harvestFill === p ? 'active' : '') + '" data-action="hfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
@@ -507,7 +546,9 @@
       '<button class="fillstep-btn" data-action="hfillstep:-5"><span>−</span><small>5%</small></button>' +
       '<span class="fillstep-val">' + harvestFill + '%</span>' +
       '<button class="fillstep-btn" data-action="hfillstep:5"><span>+</span><small>5%</small></button>' +
-      '</div></div>';
+      '</div>' +
+      (fb ? '<small class="muted fillhint">1 кофа «' + esc(fb.name) + '» на ' + harvestFill + '% ≈ <b>' + fmtKg(oneKg) + ' кг</b></small>' : '') +
+      '</div>';
   }
 
   // =======================================================================
@@ -527,6 +568,7 @@
 
     // косенето няма „едно дърво“ — коригирай обхвата
     if (careTab === 'mow' && careScope === 'tree') careScope = 'all';
+    if (careScope === 'trees' && !careTrees.length) careScope = 'all';
 
     var body = topbar('Грижа за градината', { back: 'nav:home' }) + '<div class="content">' +
       '<div class="seg">' +
@@ -535,12 +577,19 @@
       '<button class="' + (careTab === 'mow' ? 'active' : '') + '" data-action="ctab:mow">🌾 Косене</button>' +
       '</div>';
 
-    // --- избор на обхват: цялата градина / редици / едно дърво ---
-    body += '<div class="field"><label>За кого е грижата?</label>' +
-      '<button class="btn ' + (careScope === 'all' ? '' : 'secondary') + ' mb" data-action="cscope:all">' + (careScope === 'all' ? '✓ ' : '') + '🌳 Цялата градина</button>' +
-      '<button class="btn ' + (careScope === 'rows' ? '' : 'secondary') + ' mb" data-action="cscope:rows">' + (careScope === 'rows' ? '✓ ' : '') + '🌿 Избрани редици</button>' +
-      (careTab !== 'mow' ? '<button class="btn ' + (careScope === 'tree' ? '' : 'secondary') + '" data-action="cscope:tree">' + (careScope === 'tree' ? '✓ ' : '') + '🌲 Едно дърво</button>' : '') +
-      '</div>';
+    // --- избор на обхват: цялата градина / редици / едно дърво / избрани от картата ---
+    if (careScope === 'trees') {
+      var selNames = careTrees.map(function (id) { var t = tree(id); return t ? t.code : null; }).filter(Boolean);
+      body += '<div class="field"><div class="pickbanner">🌲 <b>' + selNames.length + ' избрани дървета</b> от картата' +
+        '<div class="pickchips">' + selNames.map(function (n) { return '<span class="chip green">' + esc(n) + '</span>'; }).join('') + '</div>' +
+        '<button class="btn sm ghost mt" data-action="cscope:all">Избери друг обхват</button></div></div>';
+    } else {
+      body += '<div class="field"><label>За кого е грижата?</label>' +
+        '<button class="btn ' + (careScope === 'all' ? '' : 'secondary') + ' mb" data-action="cscope:all">' + (careScope === 'all' ? '✓ ' : '') + '🌳 Цялата градина</button>' +
+        '<button class="btn ' + (careScope === 'rows' ? '' : 'secondary') + ' mb" data-action="cscope:rows">' + (careScope === 'rows' ? '✓ ' : '') + '🌿 Избрани редици</button>' +
+        (careTab !== 'mow' ? '<button class="btn ' + (careScope === 'tree' ? '' : 'secondary') + '" data-action="cscope:tree">' + (careScope === 'tree' ? '✓ ' : '') + '🌲 Едно дърво</button>' : '') +
+        '</div>';
+    }
 
     var scopeControl = '';
     if (careScope === 'rows') {
@@ -992,15 +1041,105 @@
     if (mw) mw.innerHTML = orchardGrid(el('fVar') ? el('fVar').value : '', el('fHealth') ? el('fHealth').value : '', editMode);
   }
 
+  // ---- Избор на няколко дървета върху картата (задържане + влачене) ------
+  function markCell(id, on) {
+    var c = el('cell_' + id);
+    if (c) c.classList.toggle('selected', on);
+  }
+  function selectMapTree(id) {
+    if (mapSelected.indexOf(id) === -1) { mapSelected.push(id); markCell(id, true); renderMapBar(); }
+  }
+  function toggleMapTree(id) {
+    var i = mapSelected.indexOf(id);
+    if (i === -1) { mapSelected.push(id); markCell(id, true); }
+    else { mapSelected.splice(i, 1); markCell(id, false); }
+    renderMapBar();
+  }
+  function clearMapSelect() {
+    mapSelect = false;
+    mapSelected.slice().forEach(function (id) { markCell(id, false); });
+    mapSelected = [];
+    renderMapBar();
+  }
+  function renderMapBar() {
+    var bar = el('mapbar'); if (!bar) return;
+    if (!mapSelected.length) { bar.classList.remove('open'); bar.innerHTML = ''; return; }
+    bar.innerHTML = '<div class="mapbar-info"><b>' + mapSelected.length + '</b> избрани дървета</div>' +
+      '<div class="mapbar-actions">' +
+      '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
+      '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' +
+      '<button class="btn sm ghost" data-action="mapclear">✖</button>' +
+      '</div>';
+    bar.classList.add('open');
+  }
+  // закача слушатели за задържане/влачене върху картата (докосване и мишка за тест)
+  function initMapSelect() {
+    var mw = el('mapwrap');
+    if (!mw || editMode) return;
+    var pressTimer = null, startX = 0, startY = 0, dragging = false, moved = false, startId = null;
+
+    function cellIdAt(x, y) {
+      var node = document.elementFromPoint(x, y);
+      var cell = node && node.closest ? node.closest('.tree-cell') : null;
+      return cell ? cell.getAttribute('data-tid') : null;
+    }
+    function onDown(x, y, id) {
+      startX = x; startY = y; moved = false; dragging = false; startId = id;
+      if (pressTimer) clearTimeout(pressTimer);
+      if (!id) return;
+      pressTimer = setTimeout(function () {
+        // задържане → влез в режим избор и маркирай това дърво
+        mapSelect = true; dragging = true; mapSuppressClick = true;
+        selectMapTree(id);
+        if (navigator.vibrate) navigator.vibrate(20);
+      }, 420);
+    }
+    function onMove(x, y) {
+      if (Math.abs(x - startX) > 10 || Math.abs(y - startY) > 10) moved = true;
+      if (!dragging) {
+        // ако се движи преди задържането да е сработило — отмени (това е скрол)
+        if (moved && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        return;
+      }
+      var id = cellIdAt(x, y);
+      if (id) { selectMapTree(id); mapSuppressClick = true; }
+    }
+    function onUp() {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      dragging = false;
+      // ако не последва клик (напр. след влачене) — освободи флага след малко
+      if (mapSuppressClick) setTimeout(function () { mapSuppressClick = false; }, 350);
+    }
+
+    mw.addEventListener('touchstart', function (e) {
+      var t = e.touches[0]; onDown(t.clientX, t.clientY, cellIdAt(t.clientX, t.clientY));
+    }, { passive: true });
+    mw.addEventListener('touchmove', function (e) {
+      var t = e.touches[0];
+      if (dragging) e.preventDefault(); // спри скрола докато влачим за избор
+      onMove(t.clientX, t.clientY);
+    }, { passive: false });
+    mw.addEventListener('touchend', onUp);
+    mw.addEventListener('touchcancel', onUp);
+    // мишка (за тест на компютър)
+    mw.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY, cellIdAt(e.clientX, e.clientY)); });
+    mw.addEventListener('mousemove', function (e) { if (e.buttons) onMove(e.clientX, e.clientY); });
+    mw.addEventListener('mouseup', onUp);
+    mw.addEventListener('mouseleave', onUp);
+  }
+
   document.addEventListener('click', function (e) {
     var node = e.target.closest('[data-action]');
     if (!node) return;
+    // след задържане/влачене за избор — пропусни този клик (иначе ще размаркира дървото)
+    if (mapSuppressClick) { mapSuppressClick = false; e.preventDefault(); return; }
     var action = node.getAttribute('data-action');
     var parts = action.split(':');
     var cmd = parts[0];
 
     switch (cmd) {
       case 'nav': go(parts[1]); break;
+      case 'back': goBack(); break;
       case 'login': tryLogin(parts[1]); break;
       case 'loginadmin': doAdminLogin(parts[1]); break;
       case 'register': doRegister(); break;
@@ -1008,7 +1147,13 @@
       case 'settings': go('settings'); break;
       case 'reset': if (isAdmin() && confirm('Да нулирам ли ВСИЧКИ данни? Това не може да се върне.')) { db = DB.reset(); editMode = false; go('login'); } break;
 
-      case 'tree': treeHarvestOpen = ''; treeDetailsOpen = false; go('tree', parts[1]); break;
+      case 'tree':
+        if (mapSelect) { toggleMapTree(parts[1]); break; } // в режим избор докосването маркира/размаркирва
+        treeHarvestOpen = ''; treeDetailsOpen = false; go('tree', parts[1]); break;
+      case 'mapcare':
+        careTab = parts[1]; careScope = 'trees'; careTrees = mapSelected.slice(); careTreePreset = '';
+        clearMapSelect(); go('care'); break;
+      case 'mapclear': clearMapSelect(); break;
       case 'treeedit': sheetTreeEdit(parts[1]); break;
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
@@ -1039,7 +1184,7 @@
 
       case 'care': careTab = parts[1]; careScope = 'all'; careTreePreset = ''; go('care'); break;
       case 'ctab': careTab = parts[1]; render(); break;
-      case 'cscope': careScope = parts[1]; render(); break;
+      case 'cscope': careScope = parts[1]; if (parts[1] !== 'trees') careTrees = []; render(); break;
       case 'crow': {
         var rk = parts[1];
         var ix = careRows.indexOf(rk);
@@ -1394,29 +1539,41 @@
   function saveCare(type) {
     var date = el('cdate').value;
     var note = el('cnote') ? el('cnote').value : '';
-    // определи обхвата: цялата градина / редици / едно дърво
-    var treeId = null, rows = null;
-    if (careScope === 'tree') {
+    // определи обхвата: цялата градина / редици / едно дърво / избрани от картата
+    var treeId = null, rows = null, trees = null;
+    if (careScope === 'trees') {
+      trees = careTrees.slice();
+      if (!trees.length) { alert('Няма избрани дървета.'); return; }
+    } else if (careScope === 'tree') {
       treeId = el('ctree') ? el('ctree').value : '';
       if (!treeId) { alert('Избери дърво.'); return; }
     } else if (careScope === 'rows') {
       if (!careRows.length) { alert('Избери поне една редица.'); return; }
       rows = careRows.slice();
     }
+
+    // сглоби полетата според типа грижа
+    function fill(base) {
+      if (type === 'fertilize') {
+        base.type = 'fertilize'; base.what = el('cwhat').value;
+        base.qty = parseFloat(el('cqty').value) || 0; base.unit = el('cunit').value;
+      } else if (type === 'water') {
+        base.type = 'water'; base.qty = parseFloat(el('cqty').value) || 0; base.unit = 'л';
+      } else { base.type = 'mow'; }
+      return base;
+    }
+
+    if (trees) {
+      // едно вписване за всяко избрано дърво, за да се води в неговата история
+      trees.forEach(function (id) { addEvent(fill({ date: date, note: note, treeId: id })); });
+      careTrees = [];
+      alert('Записано за ' + trees.length + ' дървета!'); go('home'); return;
+    }
+
     var base = { date: date, note: note };
     if (treeId) base.treeId = treeId;
     if (rows) base.rows = rows;
-
-    if (type === 'fertilize') {
-      base.type = 'fertilize'; base.what = el('cwhat').value;
-      base.qty = parseFloat(el('cqty').value) || 0; base.unit = el('cunit').value;
-      addEvent(base);
-    } else if (type === 'water') {
-      base.type = 'water'; base.qty = parseFloat(el('cqty').value) || 0; base.unit = 'л';
-      addEvent(base);
-    } else {
-      base.type = 'mow'; addEvent(base);
-    }
+    addEvent(fill(base));
     alert('Записано!'); go('home');
   }
 
@@ -1550,5 +1707,6 @@
     window.addEventListener('focus', function () { if (swReg) swReg.update().catch(function () {}); });
   }
 
+  try { history.replaceState({ route: route }, ''); } catch (err) {}
   render();
 })();

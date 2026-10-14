@@ -207,6 +207,20 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell.me-here .svgwrap{filter:drop-shadow(0 0 0 3px #e4572e);}
 .tree-cell.me-here::after{content:'📍';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:20px;animation:mehere 1s infinite;}
 @keyframes mehere{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-4px);}}
+/* избрани дървета за групова грижа (торене/поливане) */
+.tree-cell.selected .svgwrap{filter:drop-shadow(0 0 0 3px var(--green));background:var(--green-soft);border-radius:50%;}
+.tree-cell.selected::after{content:'✓';position:absolute;top:-8px;right:4px;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+.map-hint{font-size:12px;color:var(--muted);background:var(--green-soft);border-radius:10px;padding:8px 10px;margin:4px 0 10px;}
+.pickbanner{background:var(--green-soft);border:2px solid var(--green);border-radius:12px;padding:12px;color:var(--green-dark);}
+.pickchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+
+/* плаваща лента за групово действие върху избрани дървета */
+.mapbar{position:fixed;left:12px;right:12px;bottom:84px;z-index:60;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.2);border:2px solid var(--green);padding:12px 14px;display:none;align-items:center;justify-content:space-between;gap:10px;}
+.mapbar.open{display:flex;}
+.mapbar-info{font-size:14px;color:var(--green-dark);}
+.mapbar-info b{font-size:20px;}
+.mapbar-actions{display:flex;gap:8px;}
+.mapbar-actions .btn{width:auto;padding:0 12px;}
 
 /* компас (разходка) */
 .compass-card{display:flex;align-items:center;gap:18px;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:14px;}
@@ -261,6 +275,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .fillstep-btn small{font-size:11px;font-weight:700;opacity:.8;}
 .fillstep-btn:active{background:var(--green);color:#fff;}
 .fillstep-val{min-width:72px;text-align:center;font-size:22px;font-weight:800;color:var(--green-dark);}
+.fillhint{display:block;text-align:center;margin-top:8px;font-size:13px;}
+.fillhint b{color:var(--green-dark);font-size:15px;}
 
 /* ---- Bucket quick (бърз режим) ---------------------------------------- */
 .bucket-big{display:flex;align-items:center;gap:16px;background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);}
