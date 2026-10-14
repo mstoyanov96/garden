@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.20.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.21.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1261,6 +1261,7 @@
     var mw = el('mapwrap');
     if (!mw || editMode) return;
     var pressTimer = null, startX = 0, startY = 0, dragging = false, moved = false, startId = null;
+    var pinching = false;   // активен жест със зуум (два пръста) — да не маркира дърво
 
     function cellIdAt(x, y) {
       var node = document.elementFromPoint(x, y);
@@ -1302,14 +1303,34 @@
     }
 
     mw.addEventListener('touchstart', function (e) {
+      if (e.touches.length >= 2) {
+        // два пръста = жест за зуум → отмени задържането и не маркирай/отваряй дърво
+        pinching = true;
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        dragging = false; mapSuppressClick = true;
+        return;
+      }
+      if (pinching) return;
       var t = e.touches[0]; onDown(t.clientX, t.clientY, cellIdAt(t.clientX, t.clientY));
     }, { passive: true });
     mw.addEventListener('touchmove', function (e) {
+      if (pinching || e.touches.length >= 2) return;
       var t = e.touches[0];
       if (dragging) e.preventDefault(); // спри скрола докато влачим за избор
       onMove(t.clientX, t.clientY);
     }, { passive: false });
-    mw.addEventListener('touchend', onUp);
+    mw.addEventListener('touchend', function (e) {
+      if (pinching) {
+        // изчакай всички пръсти да се вдигнат, после пусни жеста и потисни клика
+        if (e.touches.length === 0) {
+          pinching = false;
+          mapSuppressClick = true;
+          setTimeout(function () { mapSuppressClick = false; }, 400);
+        }
+        return;
+      }
+      onUp();
+    });
     // ВАЖНО: не слушаме touchcancel — на iOS той се вдига спорадично и убиваше задържането
     // мишка (за тест на компютър)
     mw.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY, cellIdAt(e.clientX, e.clientY)); });
