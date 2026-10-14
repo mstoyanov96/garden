@@ -35,7 +35,7 @@
       { id: 'z_house', kind: 'house', emoji: '🏠', label: 'Къща', r: 2, rs: 2, c: 14, cs: 6 },
       { id: 'z_g2', kind: 'garden', emoji: '🥬', label: 'Градина', r: 4, rs: 2, c: 14, cs: 6 },
       { id: 'z_coop', kind: 'coop', emoji: '🐔', label: 'Кокошки', r: 6, rs: 1, c: 14, cs: 3 },
-      { id: 'z_dog', kind: 'dog', emoji: '🐕', label: 'Джаро', r: 6, rs: 1, c: 17, cs: 3 }
+      { id: 'z_dog', kind: 'dog', emoji: '🐕', label: 'Джари', r: 6, rs: 1, c: 17, cs: 3 }
     ];
   }
 

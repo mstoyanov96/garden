@@ -194,6 +194,9 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;color:#4f7a39;text-align:center;line-height:1.25;padding:4px;
 }
+/* едри емотиконки без текст за декоративните зони */
+.grid .house,.grid .coop,.grid .dog,.grid .garden{font-size:32px;line-height:1;padding:2px;overflow:hidden;}
+.grid .house>span,.grid .coop>span,.grid .dog>span,.grid .garden>span{display:none;}
 
 .tree-cell{
   width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
