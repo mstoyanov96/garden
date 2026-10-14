@@ -4,16 +4,14 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
   var harvestMode = 'tree';
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
-  var quickTarget = 'ground'; // 'ground' или 'tree' в бързия режим
-  var quickTree = '';         // избрано дърво в бързия режим
-  var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране/бърз режим
+  var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
   var careScope = 'all';    // 'all' | 'rows' | 'tree' — обхват на грижата
   var careRows = [];        // избрани редици (букви) когато careScope === 'rows'
   var careTreePreset = '';  // предварително избрано дърво при грижа от профила на дърво
@@ -150,7 +148,6 @@
       case 'sales': body = viewSales(); break;
       case 'buyer': body = viewBuyer(route.param); break;
       case 'settings': body = viewSettings(); break;
-      case 'quick': body = viewQuick(); break;
       case 'walk': body = viewWalk(); break;
       default: body = viewHome();
     }
@@ -183,7 +180,6 @@
     var items = [
       { k: 'home', ic: '🗺️', t: 'Градина' },
       { k: 'harvest', ic: '🧺', t: 'Събиране' },
-      { k: 'quick', ic: '➕', t: 'Бързо' },
       { k: 'stats', ic: '📊', t: 'Статистика' },
       { k: 'log', ic: '📜', t: 'Дневник' }
     ];
@@ -746,43 +742,6 @@
   }
 
   // =======================================================================
-  //  QUICK MODE (бърз режим — кофи с едно натискане)
-  // =======================================================================
-  function viewQuick() {
-    var today = DB.todayISO();
-    var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_ground' || e.type === 'harvest_tree') && e.date === today && e.quick; });
-    var activeTrees = db.trees.filter(function (t) { return !t.deletedAt; });
-    if (quickTarget === 'tree' && !tree(quickTree)) quickTree = activeTrees.length ? activeTrees[0].id : '';
-
-    var body = topbar('Бърз режим', { back: 'nav:home' }) + '<div class="content">' +
-      '<p class="muted mb">Избери откъде събираш, после натисни кофа (+1).</p>' +
-      '<div class="seg">' +
-      '<button class="' + (quickTarget === 'ground' ? 'active' : '') + '" data-action="qtarget:ground">🍂 От земята</button>' +
-      '<button class="' + (quickTarget === 'tree' ? 'active' : '') + '" data-action="qtarget:tree">🌳 От дърво</button>' +
-      '</div>';
-
-    if (quickTarget === 'tree') {
-      body += '<div class="field"><label>Кое дърво?</label><select id="qtree" class="input">' +
-        activeTrees.map(function (t) {
-          var v = variety(t.varietyId);
-          return '<option value="' + t.id + '"' + (t.id === quickTree ? ' selected' : '') + '>Дърво ' + esc(t.code) + (v ? ' (' + esc(v.name) + ')' : '') + '</option>';
-        }).join('') + '</select></div>';
-    }
-
-    body += fillChips();
-
-    body += db.settings.buckets.map(function (b) {
-      return '<div class="bucket-big"><div class="pic">' + bucketIcon(b) + '</div>' +
-        '<div class="t"><b>+1 ' + esc(b.name) + '</b><div class="muted" style="font-size:13px">1 кофа ≈ ' + b.greenKg + ' кг</div></div>' +
-        '<button class="plus" data-action="quickbucket:' + b.id + '">+1</button></div>';
-    }).join('') +
-      '<div class="section-title">Днес (бързо добавени)</div>' +
-      '<div class="card">' + (todayEvs.length ? todayEvs.map(logRow).join('') : '<p class="muted">Още нищо днес.</p>') + '</div>' +
-      '</div>';
-    return body;
-  }
-
-  // =======================================================================
   //  WALK MODE (разходка — компас + „къде съм“ на картата)
   // =======================================================================
   function viewWalk() {
@@ -984,8 +943,6 @@
     var fVar = el('fVar'), fHealth = el('fHealth');
     if (fVar) fVar.onchange = updateMap;
     if (fHealth) fHealth.onchange = updateMap;
-    var qtree = el('qtree');
-    if (qtree) qtree.onchange = function () { quickTree = qtree.value; };
   }
   function updateMap() {
     var mw = el('mapwrap');
@@ -1051,8 +1008,6 @@
       case 'hplus': stepHarvest(parts[1], 1); break;
       case 'hminus': stepHarvest(parts[1], -1); break;
       case 'savehcurrent': saveHarvest(); break;
-      case 'quickbucket': quickBucket(parts[1]); break;
-      case 'qtarget': quickTarget = parts[1]; render(); break;
 
       case 'del': if (isAdmin() && confirm('Да изтрия ли записа? Ще се пази в историята.')) { softDelete(parts[1]); render(); } break;
       case 'restore': if (isAdmin()) { restore(parts[1]); render(); } break;
@@ -1347,19 +1302,6 @@
     harvestDraft = {};
     if (saved) { alert('Записано! ' + saved + ' вписвания.'); go('home'); }
     else alert('Добави поне 1 кофа.');
-  }
-
-  function quickBucket(bucketId) {
-    var buckets = {}; buckets[bucketId] = 1;
-    if (quickTarget === 'tree') {
-      var tid = el('qtree') ? el('qtree').value : quickTree;
-      if (!tid) { alert('Избери дърво.'); return; }
-      quickTree = tid;
-      addEvent({ type: 'harvest_tree', treeId: tid, date: DB.todayISO(), state: 'green', buckets: buckets, fill: harvestFill, quick: true });
-    } else {
-      addEvent({ type: 'harvest_ground', date: DB.todayISO(), state: 'green', buckets: buckets, fill: harvestFill, quick: true });
-    }
-    render();
   }
 
   function saveTreeHarvest(id) {

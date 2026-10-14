@@ -101,7 +101,7 @@ details.sect>.sect-body{padding:0 14px 14px;}
   box-shadow:0 6px 14px rgba(47,158,82,.28);transition:transform .08s,filter .15s;
 }
 .btn:active{transform:translateY(1px);filter:brightness(.96);}
-.btn.secondary{background:var(--green-soft);color:var(--green-dark);box-shadow:none;}
+.btn.secondary{background:var(--green-soft);color:var(--green-dark);box-shadow:none;border:2px solid var(--green);}
 .btn.ghost{background:transparent;color:var(--green-dark);box-shadow:none;border:2px solid var(--line);}
 .btn.danger{background:var(--red);box-shadow:0 6px 14px rgba(228,88,79,.28);}
 .btn.sm{height:42px;font-size:15px;width:auto;padding:0 16px;}
