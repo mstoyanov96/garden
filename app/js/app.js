@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -691,7 +691,8 @@
     return topbar(b.name, { back: 'nav:sales' }) + '<div class="content">' +
       '<div class="card"><div style="display:flex;gap:12px;align-items:center">' +
       '<div class="avatar" style="width:52px;height:52px;font-size:19px">' + initials(b.name) + '</div>' +
-      '<div><b style="font-size:19px">' + esc(b.name) + '</b><div class="muted">' + esc(b.phone || '') + '</div></div></div>' +
+      '<div style="flex:1"><b style="font-size:19px">' + esc(b.name) + '</b><div class="muted">' + esc(b.phone || '') + '</div></div>' +
+      (isAdmin() ? '<button class="btn sm secondary" data-action="editbuyer:' + b.id + '">✏️ Редактирай</button>' : '') + '</div>' +
       (b.note ? '<p class="mt">' + esc(b.note) + '</p>' : '') + '</div>' +
       '<div class="section-title">История на покупки</div>' +
       '<div class="card">' + (purchases.length ? purchases.map(function (s) {
@@ -943,6 +944,17 @@
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
 
+  function sheetEditBuyer(id) {
+    var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
+    openSheet('<h3>Редактирай купувач</h3>' +
+      '<div class="field"><label>Име</label><input id="bName" class="input" value="' + esc(b.name) + '"/></div>' +
+      '<div class="field"><label>Телефон</label><input id="bPhone" class="input" value="' + esc(b.phone || '') + '"/></div>' +
+      '<div class="field"><label>Бележка</label><textarea id="bNote" class="input">' + esc(b.note || '') + '</textarea></div>' +
+      '<button class="btn" data-action="saveeditbuyer:' + id + '">💾 Запази</button>' +
+      '<button class="btn danger mt" data-action="delbuyer:' + id + '">🗑️ Изтрий купувача</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+
   // =======================================================================
   //  EVENT BINDING (delegation)
   // =======================================================================
@@ -1027,6 +1039,9 @@
       case 'savesale': saveSale(); break;
       case 'newbuyer': sheetNewBuyer(); break;
       case 'savebuyer': saveBuyer(); break;
+      case 'editbuyer': if (isAdmin()) sheetEditBuyer(parts[1]); break;
+      case 'saveeditbuyer': saveEditBuyer(parts[1]); break;
+      case 'delbuyer': deleteBuyer(parts[1]); break;
       case 'buyer': go('buyer', parts[1]); break;
 
       case 'savebuckets': saveBuckets(); break;
@@ -1406,6 +1421,26 @@
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
     db.buyers.push({ id: DB.uid('buy'), name: name, phone: el('bPhone').value, note: el('bNote').value, createdAt: Date.now() });
+    save(); closeSheet(); go('sales');
+  }
+
+  function saveEditBuyer(id) {
+    if (!isAdmin()) return;
+    var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
+    var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
+    b.name = name; b.phone = el('bPhone').value; b.note = el('bNote').value;
+    save(); closeSheet(); go('buyer', id);
+  }
+
+  function deleteBuyer(id) {
+    if (!isAdmin()) return;
+    var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
+    if (db.sales.some(function (s) { return s.buyerId === id; })) {
+      alert('Този купувач има записани продажби и не може да се изтрие.');
+      return;
+    }
+    if (!confirm('Да изтрия ли купувача „' + b.name + '"?')) return;
+    db.buyers = db.buyers.filter(function (x) { return x.id !== id; });
     save(); closeSheet(); go('sales');
   }
 
