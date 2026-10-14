@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1379,11 +1379,12 @@
     if (!off && offlineTimer) { clearInterval(offlineTimer); offlineTimer = null; }
   }
   function probeOnline() {
-    if (!navigator.onLine) { setOffline(true); return; }
-    // активна проверка (заобикаля кеша на service worker чрез ?ping)
-    fetch('manifest.webmanifest?ping=' + Date.now(), { cache: 'no-store' })
-      .then(function (r) { setOffline(!r.ok); })
-      .catch(function () { setOffline(true); });
+    // Не се доверяваме на navigator.onLine (на iOS PWA често лъже) — правим истинска заявка.
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 6000) : null;
+    fetch('manifest.webmanifest?ping=' + Date.now(), { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) { if (timer) clearTimeout(timer); setOffline(!r.ok); })
+      .catch(function () { if (timer) clearTimeout(timer); setOffline(true); });
   }
   ['online', 'offline', 'pageshow', 'focus'].forEach(function (ev) { window.addEventListener(ev, probeOnline); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) probeOnline(); });
