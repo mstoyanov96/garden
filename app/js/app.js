@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.18.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.19.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -35,6 +35,17 @@
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
   function isOwner() { var m = me(); return m && (m.isOwner || m.id === db.ownerId); }
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
+
+  // ---- Мащаб на целия интерфейс (запазва се на устройството, не се синхронизира) ----
+  var UI_ZOOM_KEY = 'walnut_zoom';
+  function getZoom() { var z = parseFloat(localStorage.getItem(UI_ZOOM_KEY)); return (z >= 0.7 && z <= 1.6) ? z : 1; }
+  function applyZoom() { try { document.documentElement.style.zoom = getZoom(); } catch (e) {} }
+  function setZoom(z) {
+    z = Math.round(z * 20) / 20; // стъпка 0.05
+    if (z < 0.7) z = 0.7; else if (z > 1.6) z = 1.6;
+    try { localStorage.setItem(UI_ZOOM_KEY, String(z)); } catch (e) {}
+    applyZoom(); render();
+  }
   function tree(id) { return db.trees.find(function (t) { return t.id === id; }); }
   function treePhotos(id) {
     var out = (db.photos || []).filter(function (p) { return p.treeId === id && !p.deletedAt; });
@@ -521,7 +532,7 @@
 
     return topbar('Дърво ' + t.code, { back: 'nav:home' }) + '<div class="content">' +
       '<div class="card flush">' +
-      (lastPhoto ? '<img class="detail-photo" src="' + lastPhoto.data + '" style="border-radius:0"/>' :
+      (lastPhoto ? '<img class="detail-photo" src="' + lastPhoto.data + '" style="border-radius:0;cursor:pointer"' + (lastPhoto.id ? ' data-action="zoomphoto:' + t.id + ':' + lastPhoto.id + '"' : '') + '/>' :
         '<div class="detail-photo" style="display:flex;align-items:center;justify-content:center">' +
         '<div style="width:90px;height:90px">' + treeSVG(t.health) + '</div></div>') +
       '<div style="padding:16px">' +
@@ -561,7 +572,7 @@
             groups[g].map(function (p) {
               var isCover = lastPhoto && p.id && lastPhoto.id === p.id;
               return '<div style="flex:0 0 auto;text-align:center">' +
-                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover' + (isCover ? ';outline:3px solid var(--green);outline-offset:-3px' : '') + '"/>' +
+                '<img ' + (p.id ? 'data-action="zoomphoto:' + t.id + ':' + p.id + '" ' : '') + 'src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover;cursor:pointer' + (isCover ? ';outline:3px solid var(--green);outline-offset:-3px' : '') + '"/>' +
                 '<div class="muted" style="font-size:11px;margin-top:4px">' + fmtDate(p.date) + '</div>' +
                 (p.id ? '<div style="margin-top:2px;display:flex;flex-direction:column;gap:3px;align-items:center">' +
                   (isCover
@@ -973,6 +984,16 @@
       }).join('') + '</div>' +
       (isAdmin() ? '<button class="btn secondary mt" data-action="changemypass">🔑 Смени моята парола</button>' : '') +
       '</div></details>' +
+
+      '<div class="section-title">Размер на изгледа</div>' +
+      '<div class="card"><p class="muted mb" style="font-size:13px">Уголеми или смали всичко в приложението, за да се чете по-лесно.</p>' +
+      '<div class="row" style="align-items:center">' +
+      '<button class="btn secondary" data-action="zoomout">➖ По-малко</button>' +
+      '<div class="center" style="font-size:22px;font-weight:800;color:var(--green-dark);min-width:72px">' + Math.round(getZoom() * 100) + '%</div>' +
+      '<button class="btn secondary" data-action="zoomin">➕ По-голямо</button>' +
+      '</div>' +
+      '<button class="btn ghost mt" data-action="zoomreset">↺ Нормален размер (100%)</button>' +
+      '</div>' +
 
       '<div class="section-title">Версия и обновяване</div>' +
       '<div class="card">' +
@@ -1410,6 +1431,11 @@
       case 'deluser': doDelUser(parts[1]); break;
       case 'changemypass': sheetSetPass(db.currentUserId); break;
 
+      case 'zoomin': setZoom(getZoom() + 0.1); break;
+      case 'zoomout': setZoom(getZoom() - 0.1); break;
+      case 'zoomreset': setZoom(1); break;
+      case 'zoomphoto': { var zp = treePhotos(parts[1]).filter(function (p) { return p.id === parts[2]; })[0]; if (zp) openLightbox(zp.data); break; }
+
       case 'checkupdate': checkForUpdate(); break;
       case 'applyupdate': applyUpdate(); break;
 
@@ -1703,6 +1729,51 @@
     reader.readAsDataURL(file);
   }
 
+  // Отваря снимка на цял екран със зуум с два пръста (жест), двойно докосване и влачене.
+  function openLightbox(src) {
+    var lb = document.getElementById('lightbox');
+    if (!lb) { lb = document.createElement('div'); lb.id = 'lightbox'; document.body.appendChild(lb); }
+    lb.innerHTML = '<button class="lb-close" aria-label="Затвори">✕</button>' +
+      '<div class="lb-hint">Разпери два пръста, за да уголемиш · двойно докосване · ✕ за затваряне</div>' +
+      '<img class="lb-img" src="' + src + '" alt=""/>';
+    lb.classList.add('open');
+    var img = lb.querySelector('.lb-img');
+    var scale = 1, tx = 0, ty = 0, startDist = 0, startScale = 1;
+    var panning = false, lastX = 0, lastY = 0, startTx = 0, startTy = 0, lastTap = 0;
+    function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; }
+    function dist(t) { var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY; return Math.sqrt(dx * dx + dy * dy); }
+    function close() { lb.classList.remove('open'); lb.innerHTML = ''; }
+    lb.querySelector('.lb-close').addEventListener('click', close);
+    lb.addEventListener('click', function (e) { if (e.target === lb && scale <= 1.02) close(); });
+    img.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2) { startDist = dist(e.touches); startScale = scale; e.preventDefault(); }
+      else if (e.touches.length === 1) {
+        var now = Date.now();
+        if (now - lastTap < 300) { scale = scale > 1 ? 1 : 2.5; tx = 0; ty = 0; apply(); e.preventDefault(); }
+        lastTap = now;
+        if (scale > 1) { panning = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; startTx = tx; startTy = ty; }
+      }
+    }, { passive: false });
+    img.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var d = dist(e.touches);
+        scale = Math.min(5, Math.max(1, startScale * d / (startDist || 1)));
+        if (scale <= 1) { tx = 0; ty = 0; }
+        apply();
+      } else if (panning && e.touches.length === 1) {
+        e.preventDefault();
+        tx = startTx + (e.touches[0].clientX - lastX);
+        ty = startTy + (e.touches[0].clientY - lastY);
+        apply();
+      }
+    }, { passive: false });
+    img.addEventListener('touchend', function (e) { if (e.touches.length === 0) { panning = false; if (scale < 1.05) { scale = 1; tx = 0; ty = 0; apply(); } } });
+    // десктоп: двоен клик и колелце за тест
+    img.addEventListener('dblclick', function () { scale = scale > 1 ? 1 : 2.5; tx = 0; ty = 0; apply(); });
+    img.addEventListener('wheel', function (e) { e.preventDefault(); scale = Math.min(5, Math.max(1, scale - e.deltaY * 0.002)); if (scale <= 1) { tx = 0; ty = 0; } apply(); }, { passive: false });
+  }
+
   function stepHarvest(key, delta) {
     harvestDraft[key] = harvestDraft[key] || { _count: 0 };
     harvestDraft[key]._count = Math.max(0, (harvestDraft[key]._count || 0) + delta);
@@ -1941,6 +2012,7 @@
 
   if (db.currentUserId && route.name === 'login') route = { name: 'home', param: null };
   try { history.replaceState({ route: route }, ''); } catch (err) {}
+  applyZoom();
   render();
   startSync();
 })();

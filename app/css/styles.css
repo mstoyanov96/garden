@@ -38,6 +38,13 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+
+/* Снимка на цял екран със зуум с два пръста */
+#lightbox{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;overflow:hidden;}
+#lightbox.open{display:flex;}
+#lightbox .lb-img{max-width:100%;max-height:100%;touch-action:none;transform-origin:center center;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+#lightbox .lb-close{position:absolute;top:max(12px,env(safe-area-inset-top));right:16px;z-index:2;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.92);font-size:22px;font-weight:800;color:#333;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.4);}
+#lightbox .lb-hint{position:absolute;bottom:max(18px,env(safe-area-inset-bottom));left:12px;right:12px;text-align:center;color:#fff;font-size:12px;opacity:.82;pointer-events:none;}
 input,select,textarea{font-family:inherit;font-size:17px;}
 img{max-width:100%;display:block;}
 
