@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.13.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.14.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -37,10 +37,26 @@
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
   function tree(id) { return db.trees.find(function (t) { return t.id === id; }); }
   function treePhotos(id) {
-    var out = (db.photos || []).filter(function (p) { return p.treeId === id; });
+    var out = (db.photos || []).filter(function (p) { return p.treeId === id && !p.deletedAt; });
     var t = tree(id);
     if (t && t.photos && t.photos.length) out = out.concat(t.photos); // съвместимост със стар формат
     return out.slice().sort(function (a, b) { return (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
+  }
+  // Основна (корична) снимка на дървото — избрана ръчно, иначе най-новата.
+  function coverPhoto(id) {
+    var photos = treePhotos(id);
+    if (!photos.length) return null;
+    var t = tree(id);
+    if (t && t.coverPhotoId) {
+      var chosen = photos.filter(function (p) { return p.id === t.coverPhotoId; })[0];
+      if (chosen) return chosen;
+    }
+    return photos[photos.length - 1];
+  }
+  function setCover(treeId, photoId) {
+    var t = tree(treeId); if (!t) return;
+    t.coverPhotoId = photoId;
+    save(); render();
   }
   function variety(id) { return db.settings.varieties.find(function (v) { return v.id === id; }); }
   function bucket(id) { return db.settings.buckets.find(function (b) { return b.id === id; }); }
@@ -115,6 +131,7 @@
     e.deletedAt = Date.now();
     e.deletedBy = db.currentUserId;
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, true);
+    if (e.type === 'photo' && e.photoId) setPhotoDeleted(e.photoId, true, e.treeId);
     save();
   }
   function restore(evId) {
@@ -122,7 +139,17 @@
     if (!e) return;
     e.deletedAt = null; e.deletedBy = null;
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, false);
+    if (e.type === 'photo' && e.photoId) setPhotoDeleted(e.photoId, false, e.treeId);
     save();
+  }
+  // Изтриване/връщане на снимка заедно със записа ѝ в дневника.
+  function setPhotoDeleted(photoId, deleted, treeId) {
+    var p = (db.photos || []).filter(function (x) { return x.id === photoId; })[0];
+    if (p) p.deletedAt = deleted ? Date.now() : null;
+    if (deleted) {
+      var t = tree(treeId);
+      if (t && t.coverPhotoId === photoId) t.coverPhotoId = null; // падни на най-новата
+    }
   }
   // Сърце-реакция — всеки (работник и админ) може да хареса/отхаресва запис.
   function toggleReaction(evId) {
@@ -463,7 +490,7 @@
     var v = variety(t.varietyId);
     var evs = activeEvents().filter(function (e) { return e.treeId === id; });
     var photos = treePhotos(id);
-    var lastPhoto = photos.length ? photos[photos.length - 1] : null;
+    var lastPhoto = coverPhoto(id);
 
     // снимки групирани по година+сезон
     var groups = {};
@@ -511,9 +538,14 @@
         Object.keys(groups).map(function (g) {
           return '<div class="card"><b>' + esc(g) + '</b><div style="display:flex;gap:8px;overflow:auto;margin-top:10px">' +
             groups[g].map(function (p) {
+              var isCover = lastPhoto && p.id && lastPhoto.id === p.id;
               return '<div style="flex:0 0 auto;text-align:center">' +
-                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover"/>' +
-                '<div class="muted" style="font-size:11px;margin-top:4px">' + fmtDate(p.date) + '</div></div>';
+                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover' + (isCover ? ';outline:3px solid var(--accent);outline-offset:-3px' : '') + '"/>' +
+                '<div class="muted" style="font-size:11px;margin-top:4px">' + fmtDate(p.date) + '</div>' +
+                (p.id ? (isCover
+                  ? '<div style="font-size:11px;margin-top:2px;color:var(--accent);font-weight:700">⭐ Основна</div>'
+                  : '<button class="btn ghost sm" data-action="setcover:' + t.id + ':' + p.id + '" style="margin-top:2px;font-size:11px;padding:2px 8px">Направи основна</button>') : '') +
+                '</div>';
             }).join('') +
             '</div></div>';
         }).join('') : '') +
@@ -1281,6 +1313,7 @@
       case 'savegps': saveGps(parts[1]); break;
       case 'sethealth': setHealth(parts[1], parts[2]); break;
       case 'addphoto': addPhoto(parts[1]); break;
+      case 'setcover': setCover(parts[1], parts[2]); break;
 
       case 'editschema': if (isAdmin()) { editMode = !editMode; render(); } break;
       case 'addtree': sheetAddTree(parts[1], parseInt(parts[2], 10)); break;
@@ -1606,8 +1639,9 @@
       resizeImage(f, 1280, 0.72, function (dataUrl) {
         var date = DB.todayISO();
         if (!db.photos) db.photos = [];
-        db.photos.push({ id: DB.uid('ph'), treeId: id, data: dataUrl, date: date, createdBy: db.currentUserId });
-        addEvent({ type: 'photo', treeId: id, date: date, note: 'добавена снимка' });
+        var pid = DB.uid('ph');
+        db.photos.push({ id: pid, treeId: id, data: dataUrl, date: date, createdBy: db.currentUserId });
+        addEvent({ type: 'photo', treeId: id, photoId: pid, date: date, note: 'добавена снимка' });
         go('tree', id);
       });
     };
