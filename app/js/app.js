@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -182,11 +182,12 @@
     var items = [
       { k: 'home', ic: '🗺️', t: 'Градина' },
       { k: 'harvest', ic: '🧺', t: 'Събиране' },
+      { k: 'sales', ic: '💰', t: 'Клиенти' },
       { k: 'stats', ic: '📊', t: 'Статистика' },
       { k: 'log', ic: '📜', t: 'Дневник' }
     ];
     return '<div class="bottomnav">' + items.map(function (i) {
-      var active = route.name === i.k ? ' active' : '';
+      var active = (route.name === i.k || (i.k === 'sales' && route.name === 'buyer')) ? ' active' : '';
       return '<div class="nav' + active + '" data-action="nav:' + i.k + '"><span class="ic">' + i.ic + '</span>' + i.t + '</div>';
     }).join('') + '</div>';
   }
@@ -530,10 +531,10 @@
       '</div>';
 
     // --- избор на обхват: цялата градина / редици / едно дърво ---
-    body += '<div class="rowfilter">' +
-      '<button class="' + (careScope === 'all' ? 'active' : '') + '" data-action="cscope:all">🌳 Цялата градина</button>' +
-      '<button class="' + (careScope === 'rows' ? 'active' : '') + '" data-action="cscope:rows">🌿 Избрани редици</button>' +
-      (careTab !== 'mow' ? '<button class="' + (careScope === 'tree' ? 'active' : '') + '" data-action="cscope:tree">🌲 Едно дърво</button>' : '') +
+    body += '<div class="field"><label>За кого е грижата?</label>' +
+      '<button class="btn ' + (careScope === 'all' ? '' : 'secondary') + ' mb" data-action="cscope:all">' + (careScope === 'all' ? '✓ ' : '') + '🌳 Цялата градина</button>' +
+      '<button class="btn ' + (careScope === 'rows' ? '' : 'secondary') + ' mb" data-action="cscope:rows">' + (careScope === 'rows' ? '✓ ' : '') + '🌿 Избрани редици</button>' +
+      (careTab !== 'mow' ? '<button class="btn ' + (careScope === 'tree' ? '' : 'secondary') + '" data-action="cscope:tree">' + (careScope === 'tree' ? '✓ ' : '') + '🌲 Едно дърво</button>' : '') +
       '</div>';
 
     var scopeControl = '';
