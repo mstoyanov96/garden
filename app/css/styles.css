@@ -379,8 +379,11 @@ body.offline .offline-bar{display:flex;animation:offslide .25s ease;}
 .update-bar button:active{filter:brightness(.95);}
 
 /* ---- helpers ----------------------------------------------------------- */
-.row{display:flex;gap:12px;}
+.row{display:flex;gap:12px;align-items:stretch;}
 .row>*{flex:1;}
+.row>.field{display:flex;flex-direction:column;margin-bottom:0;}
+.row>.field label{flex:1 0 auto;}
+.row>.field .input{margin-top:auto;}
 .center{text-align:center;}
 .mt{margin-top:14px;} .mb{margin-bottom:14px;}
 .hidden{display:none!important;}
