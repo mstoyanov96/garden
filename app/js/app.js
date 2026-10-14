@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -12,6 +12,7 @@
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
+  var treeHarvestOpen = '';   // id на дърво с отворена вградена форма за събиране
   var careScope = 'all';    // 'all' | 'rows' | 'tree' — обхват на грижата
   var careRows = [];        // избрани редици (букви) когато careScope === 'rows'
   var careTreePreset = '';  // предварително избрано дърво при грижа от профила на дърво
@@ -376,6 +377,8 @@
       '</div>' +
       '<button class="btn secondary mb" data-action="treecare:water:' + t.id + '">💧 Поливане</button>' +
 
+      (treeHarvestOpen === id ? treeHarvestForm(id) : '') +
+
       '<div class="row mb">' +
       '<button class="btn" data-action="addphoto:' + t.id + '">📷 Добави снимка</button>' +
       '<button class="btn secondary" data-action="treeedit:' + t.id + '">⚙️ Състояние</button>' +
@@ -391,6 +394,28 @@
 
       '<div class="section-title">Последни дейности</div>' +
       '<div class="card">' + (evs.length ? evs.slice(0, 12).map(logRow).join('') : '<p class="muted">Още няма дейности.</p>') + '</div>' +
+      '</div>';
+  }
+
+  // вградена форма за събиране от конкретно дърво (без изскачащ прозорец)
+  function treeHarvestForm(id) {
+    var today = DB.todayISO();
+    if (!harvestBucket || !bucket(harvestBucket)) harvestBucket = db.settings.buckets[0].id;
+    var val = (harvestDraft[id] && harvestDraft[id]._count) || 0;
+    var b = bucket(harvestBucket);
+    return '<div class="card mb" style="border:2px solid var(--green)">' +
+      '<div class="section-title" style="margin-top:0">🧺 Събиране от това дърво</div>' +
+      '<div class="field"><label>Коя кофа?</label><div class="bucketpick">' +
+      db.settings.buckets.map(function (bk) {
+        return '<button class="bpick' + (bk.id === harvestBucket ? ' active' : '') + '" data-action="hbuck:' + bk.id + '">' +
+          '<span class="bpic">' + bucketIcon(bk) + '</span>' +
+          '<b>' + esc(bk.name) + '</b><small>1 кофа ≈ ' + bk.greenKg + ' кг</small></button>';
+      }).join('') + '</div></div>' +
+      counterRow(id, 'Колко кофи', b ? b.name : '', val) +
+      fillChips() +
+      '<div class="field"><label>Дата</label><input id="thdate" type="date" class="input" value="' + today + '"/></div>' +
+      '<button class="btn" data-action="savetreeharvestinline:' + id + '">💾 Запази</button>' +
+      '<button class="btn ghost mt" data-action="treeharvestcancel">Отказ</button>' +
       '</div>';
   }
 
@@ -875,28 +900,6 @@
   }
   function closeSheet() { el('sheet').classList.remove('open'); el('sheet').innerHTML = ''; }
 
-  function sheetTreeHarvest(id) {
-    var t = tree(id); if (!t) return;
-    openSheet('<h3>🧺 Събиране — дърво ' + esc(t.code) + '</h3>' +
-      '<div class="field"><label>Коя кофа?</label><select id="thBucket" class="input">' +
-      db.settings.buckets.map(function (b) {
-        return '<option value="' + b.id + '"' + (b.id === harvestBucket ? ' selected' : '') + '>' + esc(b.name) + ' (≈ ' + b.greenKg + ' кг)</option>';
-      }).join('') + '</select></div>' +
-      '<div class="field"><label>Колко кофи?</label><input id="thCount" type="number" class="input" value="1" min="0" step="1"/></div>' +
-      '<div class="field"><label>Колко пълна беше кофата?</label><select id="thFill" class="input">' +
-      (function () {
-        var o = '';
-        for (var p = 100; p >= 5; p -= 5) {
-          o += '<option value="' + p + '">' + (p === 100 ? 'Пълна (100%)' : p + '%') + '</option>';
-        }
-        return o;
-      })() +
-      '</select></div>' +
-      '<div class="field"><label>Дата</label><input id="thDate" type="date" class="input" value="' + DB.todayISO() + '"/></div>' +
-      '<button class="btn" data-action="savetreeharvest:' + id + '">💾 Запази</button>' +
-      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
-  }
-
   function sheetTreeEdit(id) {
     var t = tree(id);
     openSheet('<h3>Състояние на дърво ' + esc(t.code) + '</h3>' +
@@ -965,10 +968,11 @@
       case 'settings': go('settings'); break;
       case 'reset': if (isAdmin() && confirm('Да нулирам ли ВСИЧКИ данни? Това не може да се върне.')) { db = DB.reset(); editMode = false; go('login'); } break;
 
-      case 'tree': go('tree', parts[1]); break;
+      case 'tree': treeHarvestOpen = ''; go('tree', parts[1]); break;
       case 'treeedit': sheetTreeEdit(parts[1]); break;
-      case 'treeharvest': sheetTreeHarvest(parts[1]); break;
-      case 'savetreeharvest': saveTreeHarvest(parts[1]); break;
+      case 'treeharvest': treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]); render(); break;
+      case 'treeharvestcancel': treeHarvestOpen = ''; render(); break;
+      case 'savetreeharvestinline': saveTreeHarvestInline(parts[1]); break;
       case 'treecare': careTab = parts[1]; careScope = 'tree'; careTreePreset = parts[2]; go('care'); break;
       case 'savetree': saveTreeEdit(parts[1]); break;
       case 'savegps': saveGps(parts[1]); break;
@@ -1304,18 +1308,17 @@
     else alert('Добави поне 1 кофа.');
   }
 
-  function saveTreeHarvest(id) {
+  function saveTreeHarvestInline(id) {
     var t = tree(id); if (!t) return;
-    var bid = el('thBucket') ? el('thBucket').value : db.settings.buckets[0].id;
-    var cnt = el('thCount') ? (parseInt(el('thCount').value, 10) || 0) : 0;
-    var fill = el('thFill') ? (parseInt(el('thFill').value, 10) || 100) : 100;
-    var date = (el('thDate') && el('thDate').value) ? el('thDate').value : DB.todayISO();
-    if (cnt <= 0) { alert('Въведи поне 1 кофа.'); return; }
+    var bid = (harvestBucket && bucket(harvestBucket)) ? harvestBucket : db.settings.buckets[0].id;
+    var cnt = (harvestDraft[id] && harvestDraft[id]._count) || 0;
+    var date = (el('thdate') && el('thdate').value) ? el('thdate').value : DB.todayISO();
+    if (cnt <= 0) { alert('Добави поне 1 кофа.'); return; }
     var buckets = {}; buckets[bid] = cnt;
-    addEvent({ type: 'harvest_tree', treeId: id, date: date, state: 'green', buckets: buckets, fill: fill });
-    closeSheet();
-    alert('Записано!');
-    go('tree', id);
+    addEvent({ type: 'harvest_tree', treeId: id, date: date, state: 'green', buckets: buckets, fill: harvestFill });
+    delete harvestDraft[id];
+    treeHarvestOpen = '';
+    render();
   }
 
   function saveGps(id) {
