@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.11.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.11.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1097,15 +1097,17 @@
       if (!id) return;
       pressTimer = setTimeout(function () {
         // задържане → влез в режим избор и маркирай това дърво
+        pressTimer = null;
         mapSelect = true; dragging = true; mapSuppressClick = true;
         selectMapTree(id);
         if (navigator.vibrate) navigator.vibrate(20);
-      }, 420);
+      }, 350);
     }
     function onMove(x, y) {
-      if (Math.abs(x - startX) > 10 || Math.abs(y - startY) > 10) moved = true;
+      // широк праг — пръстът леко мърда при натискане; само реално плъзгане да брои за скрол
+      if (Math.abs(x - startX) > 24 || Math.abs(y - startY) > 24) moved = true;
       if (!dragging) {
-        // ако се движи преди задържането да е сработило — отмени (това е скрол)
+        // ако се движи осезаемо преди задържането да е сработило — това е скрол, отмени
         if (moved && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
         return;
       }
@@ -1128,7 +1130,7 @@
       onMove(t.clientX, t.clientY);
     }, { passive: false });
     mw.addEventListener('touchend', onUp);
-    mw.addEventListener('touchcancel', onUp);
+    // ВАЖНО: не слушаме touchcancel — на iOS той се вдига спорадично и убиваше задържането
     // мишка (за тест на компютър)
     mw.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY, cellIdAt(e.clientX, e.clientY)); });
     mw.addEventListener('mousemove', function (e) { if (e.buttons) onMove(e.clientX, e.clientY); });
