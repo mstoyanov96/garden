@@ -27,10 +27,10 @@
    Това е всичко. Щом попълниш стойностите, синхронизацията се включва сама.
    ========================================================================= */
 window.FIREBASE_CONFIG = {
-  apiKey: 'PASTE_API_KEY',
-  authDomain: 'PASTE_PROJECT_ID.firebaseapp.com',
-  projectId: 'PASTE_PROJECT_ID',
-  storageBucket: 'PASTE_PROJECT_ID.appspot.com',
-  messagingSenderId: 'PASTE_SENDER_ID',
-  appId: 'PASTE_APP_ID'
+  apiKey: 'AIzaSyAKCk_bX5tORJrUq-AjAVNMS0BuDePdhvA',
+  authDomain: 'orehi-f8185.firebaseapp.com',
+  projectId: 'orehi-f8185',
+  storageBucket: 'orehi-f8185.firebasestorage.app',
+  messagingSenderId: '175982371885',
+  appId: '1:175982371885:web:b0d5d1a5816766c98fc4a4'
 };
