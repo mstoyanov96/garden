@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.11.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.11.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -287,7 +287,8 @@
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
         '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' +
         '</div>') +
-      (editMode ? '' : '<div class="map-hint">💡 Задръж пръст върху дърво, за да избереш няколко наведнъж (за торене/поливане).</div>') +
+      (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button></div>') +
+      (editMode ? '' : '<div class="map-hint">💡 Натисни „Избери няколко" и докосвай дърветата, или задръж пръст върху дърво за да започнеш.</div>') +
       '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode) + '</div>' +
       '<div class="legend">' +
       '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
@@ -538,6 +539,8 @@
   function fillChips() {
     var fb = bucket(harvestBucket);
     var oneKg = fb ? fb.greenKg * harvestFill / 100 : 0;
+    var lcName = fb ? fb.name.charAt(0).toLowerCase() + fb.name.slice(1) : '';
+    var hint = fb ? ('1 ' + esc(lcName) + (harvestFill !== 100 ? ' на ' + harvestFill + '%' : '') + ' ≈ <b>' + fmtKg(oneKg) + ' кг</b>') : '';
     return '<div class="field"><label>Колко пълни бяха кофите?</label><div class="rowfilter">' +
       [100, 75, 50, 25, 10, 5].map(function (p) {
         return '<button class="' + (harvestFill === p ? 'active' : '') + '" data-action="hfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
@@ -547,7 +550,7 @@
       '<span class="fillstep-val">' + harvestFill + '%</span>' +
       '<button class="fillstep-btn" data-action="hfillstep:5"><span>+</span><small>5%</small></button>' +
       '</div>' +
-      (fb ? '<small class="muted fillhint">1 кофа «' + esc(fb.name) + '» на ' + harvestFill + '% ≈ <b>' + fmtKg(oneKg) + ' кг</b></small>' : '') +
+      (hint ? '<small class="muted fillhint">' + hint + '</small>' : '') +
       '</div>';
   }
 
@@ -1063,12 +1066,13 @@
   }
   function renderMapBar() {
     var bar = el('mapbar'); if (!bar) return;
-    if (!mapSelected.length) { bar.classList.remove('open'); bar.innerHTML = ''; return; }
-    bar.innerHTML = '<div class="mapbar-info"><b>' + mapSelected.length + '</b> избрани дървета</div>' +
+    if (!mapSelect && !mapSelected.length) { bar.classList.remove('open'); bar.innerHTML = ''; return; }
+    var n = mapSelected.length;
+    bar.innerHTML = '<div class="mapbar-info">' + (n ? '<b>' + n + '</b> избрани дървета' : 'Докосни дърветата') + '</div>' +
       '<div class="mapbar-actions">' +
-      '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
-      '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' +
-      '<button class="btn sm ghost" data-action="mapclear">✖</button>' +
+      (n ? '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
+        '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' : '') +
+      '<button class="btn sm ghost" data-action="mapclear">Готово</button>' +
       '</div>';
     bar.classList.add('open');
   }
@@ -1080,8 +1084,12 @@
 
     function cellIdAt(x, y) {
       var node = document.elementFromPoint(x, y);
-      var cell = node && node.closest ? node.closest('.tree-cell') : null;
-      return cell ? cell.getAttribute('data-tid') : null;
+      // върви нагоре ръчно (по-надеждно от closest при SVG елементи в стари браузъри)
+      while (node && node !== document.body) {
+        if (node.classList && node.classList.contains('tree-cell')) return node.getAttribute('data-tid');
+        node = node.parentNode;
+      }
+      return null;
     }
     function onDown(x, y, id) {
       startX = x; startY = y; moved = false; dragging = false; startId = id;
@@ -1153,7 +1161,10 @@
       case 'mapcare':
         careTab = parts[1]; careScope = 'trees'; careTrees = mapSelected.slice(); careTreePreset = '';
         clearMapSelect(); go('care'); break;
-      case 'mapclear': clearMapSelect(); break;
+      case 'mapclear': clearMapSelect(); render(); break;
+      case 'mapselecttoggle':
+        if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
+        render(); break;
       case 'treeedit': sheetTreeEdit(parts[1]); break;
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
