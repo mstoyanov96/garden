@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.16.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.17.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -154,6 +154,13 @@
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, false);
     if (e.type === 'photo' && e.photoId) setPhotoDeleted(e.photoId, false, e.treeId);
     save();
+  }
+  // Окончателно маха запис от дневника (за тестови записи) — не може да се върне.
+  function purgeEvent(evId) {
+    var i = db.events.findIndex(function (x) { return x.id === evId; });
+    if (i === -1) return;
+    db.events.splice(i, 1);
+    save(); render();
   }
   // Изтриване/връщане на снимка заедно със записа ѝ в дневника.
   function setPhotoDeleted(photoId, deleted, treeId) {
@@ -795,7 +802,8 @@
       '<small>' + detail + ' — ' + (who ? esc(who.name) : '?') + onBehalf + '</small>' +
       '<div class="reacts">' + reactBtn + '</div></div>' +
       '<div class="meta">' + fmtDate(e.date) +
-      (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>'
+      (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
+        '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="purge:' + e.id + '">🗑️ Завинаги</button>'
         : '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
       '</div></div>';
   }
@@ -1378,6 +1386,7 @@
         break;
       }
       case 'restore': if (isAdmin()) { restore(parts[1]); render(); } break;
+      case 'purge': if (isAdmin() && confirm('Да изтрия ли записа ЗАВИНАГИ? Не може да се върне.')) { purgeEvent(parts[1]); } break;
       case 'react': toggleReaction(parts[1]); break;
 
       case 'newsale': sheetNewSale(); break;
