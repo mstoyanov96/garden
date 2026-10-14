@@ -1,11 +1,13 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v42';              // ← увеличавай при нова версия
+var VERSION = 'v43';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
   './index.html',
   './css/styles.css',
   './js/data.js',
+  './js/sync.js',
+  './js/firebase-config.js',
   './js/app.js',
   './manifest.webmanifest',
   './assets/icon.svg',

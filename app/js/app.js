@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.11.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.12.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -23,12 +23,13 @@
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
+  var syncStatus = 'off';   // 'off' | 'connecting' | 'on' | 'error' — състояние на облачната синхронизация
 
   // ---- Helpers -----------------------------------------------------------
   function $(sel, root) { return (root || document).querySelector(sel); }
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
-  function save() { DB.save(db); }
+  function save() { DB.save(db); if (window.Sync) window.Sync.push(); }
   function me() { return db.users.find(function (u) { return u.id === db.currentUserId; }) || null; }
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
   function isOwner() { var m = me(); return m && (m.isOwner || m.id === db.ownerId); }
@@ -200,6 +201,43 @@
     bind();
     if (route.name === 'walk') startWalk();
     if (route.name === 'home') { initMapSelect(); renderMapBar(); }
+  }
+
+  // =======================================================================
+  //  ОБЛАЧНА СИНХРОНИЗАЦИЯ
+  // =======================================================================
+  function setSyncStatus(s) {
+    syncStatus = s;
+    var box = el('syncStatus');
+    if (box) box.innerHTML = syncStatusHtml();
+  }
+  function syncStatusText() {
+    return syncStatus === 'on' ? 'включена'
+      : syncStatus === 'connecting' ? 'свързване…'
+        : syncStatus === 'error' ? 'грешка във връзката'
+          : 'изключена (не е настроена)';
+  }
+  function syncStatusHtml() {
+    var dot = syncStatus === 'on' ? '🟢' : syncStatus === 'connecting' ? '🟡' : syncStatus === 'error' ? '🔴' : '⚪';
+    return dot + ' Облачна синхронизация: <b>' + syncStatusText() + '</b>';
+  }
+  // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
+  function applyCloudSnapshot(cloud) {
+    var keepUser = db.currentUserId;
+    ['trees', 'events', 'buyers', 'sales', 'users'].forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
+    if (cloud.settings) db.settings = cloud.settings;
+    db.currentUserId = keepUser;
+    DB.save(db);
+    render();
+  }
+  function startSync() {
+    if (!window.Sync) return;
+    window.Sync.init({
+      getLocalDb: function () { return db; },
+      onInitialLoad: applyCloudSnapshot,
+      onRemote: function () { DB.save(db); if (!isSheetOpen()) render(); },
+      setStatus: setSyncStatus
+    });
   }
 
   // ---- Topbar ------------------------------------------------------------
@@ -770,6 +808,11 @@
   function viewSettings() {
     var s = db.settings;
     return topbar('Настройки', { back: 'nav:home' }) + '<div class="content">' +
+      '<details class="sect"><summary>☁️ Синхронизация</summary><div class="sect-body">' +
+      '<div class="card"><div id="syncStatus">' + syncStatusHtml() + '</div>' +
+      '<p class="muted" style="font-size:13px;margin-top:8px">Когато е включена, всички телефони виждат едни и същи дървета и събирания. Промените се сливат автоматично, дори да си бил офлайн.</p>' +
+      '</div></div></details>' +
+
       '<details class="sect"><summary>🌰 Сортове орехи</summary><div class="sect-body">' +
       '<div class="card">' + s.varieties.map(function (v) {
         return '<div class="kv"><span class="k">' + (v.size === 'big' ? '🌰 Едри' : '🥜 Малки') + '</span><span class="v">' + esc(v.name) + ' — ' + esc(v.note) + '</span></div>';
@@ -1726,4 +1769,5 @@
   if (db.currentUserId && route.name === 'login') route = { name: 'home', param: null };
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   render();
+  startSync();
 })();
