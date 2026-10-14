@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v25';              // ← увеличавай при нова версия
+var VERSION = 'v26';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
@@ -15,7 +15,10 @@ var ASSETS = [
 ];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));
+  // cache:'reload' = заобикаля HTTP кеша на GitHub Pages (max-age=600) и тегли свежи файлове
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(ASSETS.map(function (u) { return new Request(u, { cache: 'reload' }); }));
+  }));
   // НЕ викаме skipWaiting тук — чакаме потребителят да натисне „Обнови“.
 });
 
@@ -38,15 +41,17 @@ self.addEventListener('fetch', function (e) {
   // проверка за връзка — само мрежа, без резервен кеш (за коректен офлайн индикатор)
   if (url.searchParams.has('ping')) { e.respondWith(fetch(req)); return; }
 
-  // Network-first: винаги пробваме мрежата (свежа версия), при липса — от кеша.
+  // Cache-first от версионирания кеш (свеж след всяко обновяване на SW);
+  // при липса — мрежа; при неуспех на навигация — index.html.
   e.respondWith(
-    fetch(req).then(function (res) {
-      var copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(req, copy); });
-      return res;
-    }).catch(function () {
-      return caches.match(req).then(function (cached) {
-        return cached || caches.match('./index.html');
+    caches.match(req).then(function (cached) {
+      if (cached) return cached;
+      return fetch(req).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        return res;
+      }).catch(function () {
+        return caches.match('./index.html');
       });
     })
   );

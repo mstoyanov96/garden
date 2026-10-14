@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1430,7 +1430,8 @@
   }
 
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-    navigator.serviceWorker.register('service-worker.js').then(function (reg) {
+    // updateViaCache:'none' = и самият service-worker.js се тегли без HTTP кеш (за да се вижда новата версия)
+    navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' }).then(function (reg) {
       swReg = reg;
       if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
       reg.addEventListener('updatefound', function () {
