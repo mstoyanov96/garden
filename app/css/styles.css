@@ -212,8 +212,10 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .compass .rose .s{bottom:4px;left:50%;transform:translateX(-50%);}
 .compass .rose .e{right:6px;top:50%;transform:translateY(-50%);}
 .compass .rose .w{left:6px;top:50%;transform:translateY(-50%);}
-.compass .needle{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:50% 50%;transition:transform .15s ease-out;
-  border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:46px solid #e4572e;margin:-46px 0 0 -9px;}
+.compass .needle{position:absolute;inset:0;transform-origin:50% 50%;transition:transform .15s ease-out;}
+.compass .needle::before{content:'';position:absolute;left:50%;top:10px;width:0;height:0;transform:translateX(-50%);
+  border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:45px solid #e4572e;}
+.compass .needle::after{content:'';position:absolute;left:50%;top:50%;width:12px;height:12px;border-radius:50%;background:#333;border:2px solid #fff;transform:translate(-50%,-50%);}
 .compass-info .big{font-size:26px;font-weight:800;color:var(--green-dark);}
 
 /* режим редактиране */
