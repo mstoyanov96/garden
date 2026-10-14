@@ -28,6 +28,17 @@
     return d.toISOString().slice(0, 10);
   }
 
+  // Декоративни зони на картата (координати в grid-линии: r=ред, c=полу-колона).
+  function defaultZones() {
+    return [
+      { id: 'z_g1', kind: 'garden', emoji: '🥬', label: 'Градина', r: 2, rs: 3, c: 8, cs: 6 },
+      { id: 'z_house', kind: 'house', emoji: '🏠', label: 'Къща', r: 2, rs: 2, c: 14, cs: 6 },
+      { id: 'z_g2', kind: 'garden', emoji: '🥬', label: 'Градина', r: 4, rs: 2, c: 14, cs: 6 },
+      { id: 'z_coop', kind: 'coop', emoji: '🐔', label: 'Кокошки', r: 6, rs: 1, c: 14, cs: 3 },
+      { id: 'z_dog', kind: 'dog', emoji: '🐕', label: 'Джаро', r: 6, rs: 1, c: 17, cs: 3 }
+    ];
+  }
+
   // ---- Seed ---------------------------------------------------------------
   function seed() {
     var varieties = [
@@ -100,7 +111,8 @@
         varieties: varieties,
         buckets: buckets,
         yieldInputKg: 10,     // вход за рандеман (сухи с черупка)
-        yieldOutputKg: 4.8    // изход (чиста ядка)
+        yieldOutputKg: 4.8,   // изход (чиста ядка)
+        zones: defaultZones()
       },
       users: users,
       trees: trees,
@@ -119,7 +131,11 @@
       save(fresh);
       return fresh;
     }
-    try { return JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
+    var db;
+    try { db = JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
+    // миграции за стари инсталации (пазим съществуващите данни)
+    if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
+    return db;
   }
 
   function save(db) {
@@ -141,6 +157,7 @@
     load: load,
     save: save,
     reset: reset,
-    seed: seed
+    seed: seed,
+    defaultZones: defaultZones
   };
 })(window);

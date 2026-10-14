@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.8.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -236,7 +236,8 @@
       (isAdmin() ? '<button class="iconbtn' + (editMode ? ' on' : '') + '" data-action="editschema" aria-label="Редактирай схемата">' + (editMode ? '✓' : '✏️') + '</button>' : '') +
       '</div>' +
       (editMode ? '' : '<button class="btn secondary mb" data-action="nav:walk">🧭 Разходка — къде съм в градината</button>') +
-      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за да добавиш дърво, или дърво за да го местиш/триеш.</div>' : '') +
+      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, или зона (Градина, Къща…) за да ѝ смениш мястото и размера.</div>' : '') +
+      (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar"><option value="">Всички сортове</option>' +
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
@@ -270,6 +271,11 @@
     var maxCol = 0;
     trees.forEach(function (t) { if (t.col > maxCol) maxCol = t.col; });
     if (maxCol < 9) maxCol = 9;
+    // разшири колоните, ако зона стърчи надясно
+    (db.settings.zones || []).forEach(function (z) {
+      var need = Math.ceil((z.c + z.cs - 2) / 2);
+      if (need > maxCol) maxCol = need;
+    });
 
     // в режим редакция добавяме един празен ред отдолу за нови дървета
     if (edit) {
@@ -278,12 +284,18 @@
       if (next && rowKeys.indexOf(next) === -1) rowKeys.push(next);
     }
 
-    // резервирани декоративни зони горе вдясно (А–Д · колони 4–9)
+    // резервирани декоративни зони горе вдясно — изчисляват се от зоните
+    var zones = db.settings.zones || [];
+    function cellCovered(gr, cc) {
+      for (var i = 0; i < zones.length; i++) {
+        var z = zones[i];
+        if (z.r <= gr && gr < z.r + z.rs && z.c <= 2 * cc && (z.c + z.cs) >= 2 * cc + 2) return true;
+      }
+      return false;
+    }
     function reserved(rk, c) {
-      var top = (rk === 'А' || rk === 'Б' || rk === 'В');
-      var mid = (rk === 'Г' || rk === 'Д');
-      if ((top || mid) && c >= 4 && c <= 9) return 'zone';
-      return null;
+      var gr = rowKeys.indexOf(rk) + 2;
+      return cellCovered(gr, c) ? 'zone' : null;
     }
 
     // всяка колона е разделена на 2 полу-коли, за да може границата да мине през средата на колона 6
@@ -291,13 +303,13 @@
     var html = '<div class="grid" style="grid-template-columns:16px repeat(' + cols2 + ',1fr)">';
     html += '<div class="corner" style="grid-row:1;grid-column:1"></div>';
     for (var c = 1; c <= maxCol; c++) html += '<div class="colhead" style="grid-row:1;grid-column:' + (2 * c) + ' / span 2">' + c + '</div>';
-    // горе вляво Градина · горе вдясно Къща (А–Б) · втора Градина (В–Г, кол.7–9)
-    // ред Д: Кокошки (ляво) + Джаро (дясно)
-    html += '<div class="garden" style="grid-row:2 / span 3;grid-column:8 / 14">🥬<span>Градина</span></div>';
-    html += '<div class="house" style="grid-row:2 / span 2;grid-column:14 / 20">🏠<span>Къща</span></div>';
-    html += '<div class="garden" style="grid-row:4 / span 2;grid-column:14 / 20">🥬<span>Градина</span></div>';
-    html += '<div class="coop" style="grid-row:6 / span 1;grid-column:14 / 17">🐔<span>Кокошки</span></div>';
-    html += '<div class="dog" style="grid-row:6 / span 1;grid-column:17 / 20">🐕<span>Джаро</span></div>';
+    // декоративни зони (Градина, Къща, Кокошки, Джаро) — местят се/оразмеряват в режим редакция
+    zones.forEach(function (z) {
+      var act = edit ? ' data-action="editzone:' + z.id + '"' : '';
+      var cls = z.kind + (edit ? ' zone-edit' : '');
+      html += '<div class="' + cls + '"' + act + ' style="grid-row:' + z.r + ' / span ' + z.rs + ';grid-column:' + z.c + ' / span ' + z.cs + '">' +
+        (z.emoji || '') + '<span>' + esc(z.label) + '</span></div>';
+    });
 
     rowKeys.forEach(function (rk, ri) {
       var gr = ri + 2;
@@ -769,15 +781,27 @@
 
   function startWalk() {
     stopWalk(); // избегни дублирани слушатели при пре-рендиране
-    // компас (посока на телефона)
+    // компас (посока на телефона) — с изглаждане срещу трептене
+    walk.fx = null; walk.fy = null; walk.rot = 0;
     function onOrient(e) {
       var hd = (typeof e.webkitCompassHeading === 'number') ? e.webkitCompassHeading
         : (e.alpha != null ? (360 - e.alpha) : null);
       if (hd == null) return;
-      walk.heading = hd;
+      // нискочестотен филтър върху вектора (sin/cos), за да работи и около 0°/360°
+      var rad = hd * Math.PI / 180, a = 0.12;
+      if (walk.fx == null) { walk.fx = Math.cos(rad); walk.fy = Math.sin(rad); }
+      else { walk.fx += a * (Math.cos(rad) - walk.fx); walk.fy += a * (Math.sin(rad) - walk.fy); }
+      var sm = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI;
+      if (sm < 0) sm += 360;
+      walk.heading = sm;
+      // непрекъснато въртене по най-късия път (без скок при 359°→0°)
+      var delta = sm - (walk.rot % 360);
+      if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
+      if (Math.abs(delta) < 0.5) return; // малка мъртва зона срещу микро-трептене
+      walk.rot += delta;
       var needle = el('walkNeedle'), txt = el('walkHeading');
-      if (needle) needle.style.transform = 'rotate(' + hd + 'deg)';
-      if (txt) txt.textContent = Math.round(hd) + '° ' + compassName(hd);
+      if (needle) needle.style.transform = 'rotate(' + walk.rot.toFixed(1) + 'deg)';
+      if (txt) txt.textContent = Math.round(sm) + '° ' + compassName(sm);
     }
     walk.orient = onOrient;
     function attachOrient() {
@@ -937,6 +961,13 @@
       case 'movetree': moveTree(parts[1], parts[2]); break;
       case 'deltree': deleteTree(parts[1]); break;
 
+      case 'editzone': sheetEditZone(parts[1]); break;
+      case 'movezone': moveZone(parts[1], parts[2]); break;
+      case 'sizezone': sizeZone(parts[1], parts[2]); break;
+      case 'renamezone': renameZone(parts[1]); break;
+      case 'addzone': addZone(); break;
+      case 'delzone': deleteZone(parts[1]); break;
+
       case 'care': careTab = parts[1]; go('care'); break;
       case 'ctab': careTab = parts[1]; render(); break;
       case 'cscope': careScope = parts[1]; render(); break;
@@ -1083,6 +1114,72 @@
     t.deletedAt = Date.now(); t.deletedBy = db.currentUserId; save();
     addEvent({ type: 'tree_edit', treeId: id, date: DB.todayISO(), note: 'изтрито дърво ' + t.code });
     closeSheet(); render();
+  }
+
+  // ---- Decorative zones (admin) -----------------------------------------
+  function zoneById(id) { return (db.settings.zones || []).find(function (z) { return z.id === id; }); }
+  function orchardRowCount() { var s = {}; db.trees.forEach(function (t) { if (!t.deletedAt) s[t.row] = 1; }); return Object.keys(s).length || 1; }
+
+  function sheetEditZone(id) {
+    if (!isAdmin()) return;
+    var z = zoneById(id); if (!z) return;
+    openSheet('<h3>' + (z.emoji || '') + ' ' + esc(z.label) + '</h3>' +
+      '<div class="field"><label>Име</label><div class="row"><input id="znName" class="input" value="' + esc(z.label) + '" />' +
+      '<button class="btn sm" data-action="renamezone:' + id + '">Запази</button></div></div>' +
+      '<div class="field"><label>Премести</label><div class="move-pad">' +
+      '<span class="sp"></span><button data-action="movezone:' + id + ':up">↑</button><span class="sp"></span>' +
+      '<button data-action="movezone:' + id + ':left">←</button><span class="sp"></span><button data-action="movezone:' + id + ':right">→</button>' +
+      '<span class="sp"></span><button data-action="movezone:' + id + ':down">↓</button><span class="sp"></span>' +
+      '</div></div>' +
+      '<div class="field"><label>Ширина</label><div class="row">' +
+      '<button class="btn secondary" data-action="sizezone:' + id + ':wminus">− по-тясно</button>' +
+      '<button class="btn secondary" data-action="sizezone:' + id + ':wplus">по-широко +</button></div></div>' +
+      '<div class="field"><label>Височина</label><div class="row">' +
+      '<button class="btn secondary" data-action="sizezone:' + id + ':hminus">− по-ниско</button>' +
+      '<button class="btn secondary" data-action="sizezone:' + id + ':hplus">по-високо +</button></div></div>' +
+      '<button class="btn danger mt" data-action="delzone:' + id + '">🗑️ Изтрий зоната</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Готово</button>');
+  }
+
+  function moveZone(id, dir) {
+    var z = zoneById(id); if (!z) return;
+    var maxR = 1 + orchardRowCount(); // последна линия с редове
+    if (dir === 'up') z.r = Math.max(2, z.r - 1);
+    else if (dir === 'down') z.r = Math.min(maxR, z.r + 1);
+    else if (dir === 'left') z.c = Math.max(2, z.c - 1);
+    else if (dir === 'right') z.c = Math.min(24, z.c + 1);
+    save(); updateMap(); sheetEditZone(id);
+  }
+
+  function sizeZone(id, how) {
+    var z = zoneById(id); if (!z) return;
+    if (how === 'wplus') z.cs = Math.min(22, z.cs + 1);
+    else if (how === 'wminus') z.cs = Math.max(1, z.cs - 1);
+    else if (how === 'hplus') z.rs = Math.min(orchardRowCount(), z.rs + 1);
+    else if (how === 'hminus') z.rs = Math.max(1, z.rs - 1);
+    save(); updateMap(); sheetEditZone(id);
+  }
+
+  function renameZone(id) {
+    var z = zoneById(id); if (!z) return;
+    var v = el('znName') ? el('znName').value.trim() : '';
+    if (v) { z.label = v; save(); updateMap(); }
+    sheetEditZone(id);
+  }
+
+  function addZone() {
+    if (!isAdmin()) return;
+    db.settings.zones = db.settings.zones || [];
+    db.settings.zones.push({ id: DB.uid('z'), kind: 'garden', emoji: '📍', label: 'Нова зона', r: 2, rs: 2, c: 8, cs: 4 });
+    save(); render();
+  }
+
+  function deleteZone(id) {
+    if (!isAdmin()) return;
+    var z = zoneById(id); if (!z) return;
+    if (!confirm('Да изтрия ли зоната „' + z.label + '“?')) return;
+    db.settings.zones = db.settings.zones.filter(function (x) { return x.id !== id; });
+    save(); closeSheet(); render();
   }
 
   // ---- User management (owner) ------------------------------------------
