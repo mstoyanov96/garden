@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.8.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.8.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -232,9 +232,10 @@
       '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
       '</div>' +
 
-      '<div class="section-title">Карта на градината</div>' +
-      (isAdmin() ? '<button class="btn ' + (editMode ? '' : 'secondary') + ' mb" data-action="editschema">' +
-        (editMode ? '✓ Готово с редакцията' : '✏️ Редактирай схемата') + '</button>' : '') +
+      '<div class="section-title title-row">Карта на градината' +
+      (isAdmin() ? '<button class="iconbtn' + (editMode ? ' on' : '') + '" data-action="editschema" aria-label="Редактирай схемата">' + (editMode ? '✓' : '✏️') + '</button>' : '') +
+      '</div>' +
+      (editMode ? '' : '<button class="btn secondary mb" data-action="nav:walk">🧭 Разходка — къде съм в градината</button>') +
       (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за да добавиш дърво, или дърво за да го местиш/триеш.</div>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar"><option value="">Всички сортове</option>' +
@@ -247,7 +248,6 @@
       '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
       '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
       '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span></div>' +
-      (editMode ? '' : '<button class="btn secondary mt" data-action="nav:walk">🧭 Разходка — къде съм в градината</button>') +
 
       '<div class="section-title">Бързи действия</div>' +
       '<div class="row mb">' +
