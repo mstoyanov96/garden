@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.8';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.9';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -803,46 +803,62 @@
 
   function startWalk() {
     stopWalk(); // избегни дублирани слушатели при пре-рендиране
-    // компас (посока на телефона) — със силно изглаждане срещу трептене в ръка
-    walk.fx = null; walk.fy = null; walk.rot = 0; walk.shown = null; walk.buf = [];
-    function onOrient(e) {
+    // компас (посока на телефона) — изгладена стрелка, независима от шума на сензора
+    walk.fx = null; walk.fy = null; walk.rot = 0; walk.shown = null;
+    walk.targetDeg = null; walk.absok = false;
+
+    // прилага ново измерване през кръгов нискочестотен филтър (без скок при 359°→0°)
+    function applyHeading(hd) {
+      var rad = hd * Math.PI / 180;
+      var cx = Math.cos(rad), cy = Math.sin(rad);
+      var a = 0.12; // по-силно изглаждане = по-спокойна стрелка
+      if (walk.fx == null) { walk.fx = cx; walk.fy = cy; }
+      else { walk.fx += a * (cx - walk.fx); walk.fy += a * (cy - walk.fy); }
+      var sm = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI;
+      if (sm < 0) sm += 360;
+      walk.targetDeg = sm;
+      walk.heading = sm;
+    }
+    // абсолютен източник (Android): има истинска посока към север
+    function onOrientAbs(e) {
       var hd = (typeof e.webkitCompassHeading === 'number') ? e.webkitCompassHeading
         : (e.alpha != null ? (360 - e.alpha) : null);
       if (hd == null) return;
-      var rad = hd * Math.PI / 180;
-      // медианен филтър на вектора (cos/sin) по последните 5 отчета — маха единичните „скокове“
-      walk.buf.push([Math.cos(rad), Math.sin(rad)]);
-      if (walk.buf.length > 5) walk.buf.shift();
-      var cs = walk.buf.map(function (p) { return p[0]; }).sort(function (a, b) { return a - b; });
-      var ss = walk.buf.map(function (p) { return p[1]; }).sort(function (a, b) { return a - b; });
-      var mid = Math.floor(walk.buf.length / 2);
-      var mc = cs[mid], ms = ss[mid];
-      // плавно изглаждане върху изчистената от скокове стойност
-      var a = 0.18;
-      if (walk.fx == null) { walk.fx = mc; walk.fy = ms; }
-      else { walk.fx += a * (mc - walk.fx); walk.fy += a * (ms - walk.fy); }
-      var sm = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI;
-      if (sm < 0) sm += 360;
-      walk.heading = sm;
-      // непрекъснато въртене по най-късия път (без скок при 359°→0°)
-      var delta = sm - (walk.rot % 360);
+      walk.absok = true;
+      applyHeading(hd);
+    }
+    // относителен източник (iOS дава webkitCompassHeading тук) — ползва се само ако няма абсолютен
+    function onOrientRel(e) {
+      if (walk.absok) return; // не смесвай двата източника — това причиняваше „откачането“
+      var hd = (typeof e.webkitCompassHeading === 'number') ? e.webkitCompassHeading
+        : (e.alpha != null ? (360 - e.alpha) : null);
+      if (hd == null) return;
+      applyHeading(hd);
+    }
+    walk.orientAbs = onOrientAbs;
+    walk.orientRel = onOrientRel;
+
+    // непрекъсната плавна анимация — стрелката бавно се насочва към целта на всеки кадър
+    function tick() {
+      walk.raf = requestAnimationFrame(tick);
+      if (walk.targetDeg == null) return;
+      var delta = walk.targetDeg - (walk.rot % 360);
       if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
-      if (Math.abs(delta) < 2) return; // мъртва зона срещу микро-трептене в ръка
-      if (delta > 12) delta = 12; else if (delta < -12) delta = -12; // таван на стъпката срещу внезапни скокове
-      walk.rot += delta;
-      var needle = el('walkNeedle'), txt = el('walkHeading');
+      walk.rot += delta * 0.15; // плавно насочване, а не рязък скок
+      var needle = el('walkNeedle');
       if (needle) needle.style.transform = 'rotate(' + walk.rot.toFixed(1) + 'deg)';
-      // текстът се обновява само при осезаема промяна (>=3°), за да не мига числото
-      var shownDeg = Math.round(sm);
-      if (txt && (walk.shown == null || Math.abs(((shownDeg - walk.shown + 540) % 360) - 180) >= 3)) {
+      var shownDeg = Math.round(((walk.rot % 360) + 360) % 360);
+      var txt = el('walkHeading');
+      if (txt && (walk.shown == null || Math.abs(((shownDeg - walk.shown + 540) % 360) - 180) >= 2)) {
         walk.shown = shownDeg;
-        txt.textContent = shownDeg + '° ' + compassName(sm);
+        txt.textContent = shownDeg + '° ' + compassName(shownDeg);
       }
     }
-    walk.orient = onOrient;
+    walk.raf = requestAnimationFrame(tick);
+
     function attachOrient() {
-      window.addEventListener('deviceorientationabsolute', onOrient, true);
-      window.addEventListener('deviceorientation', onOrient, true);
+      window.addEventListener('deviceorientationabsolute', onOrientAbs, true);
+      window.addEventListener('deviceorientation', onOrientRel, true);
     }
     if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
       DeviceOrientationEvent.requestPermission().then(function (r) { if (r === 'granted') attachOrient(); }).catch(function () {});
@@ -862,11 +878,11 @@
 
   function stopWalk() {
     if (walk.watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(walk.watchId);
-    if (walk.orient) {
-      window.removeEventListener('deviceorientationabsolute', walk.orient, true);
-      window.removeEventListener('deviceorientation', walk.orient, true);
-    }
-    walk.watchId = null; walk.orient = null; walk.nearestId = null;
+    if (walk.raf) { cancelAnimationFrame(walk.raf); walk.raf = null; }
+    if (walk.orientAbs) window.removeEventListener('deviceorientationabsolute', walk.orientAbs, true);
+    if (walk.orientRel) window.removeEventListener('deviceorientation', walk.orientRel, true);
+    walk.orientAbs = null; walk.orientRel = null;
+    walk.watchId = null; walk.nearestId = null;
   }
 
   function compassName(d) {
