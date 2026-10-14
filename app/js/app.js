@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.11.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.11.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -179,6 +179,9 @@
     var app = el('app');
     if (!db.currentUserId) { app.className = 'app'; app.innerHTML = viewLogin(); bind(); return; }
     app.className = 'app';
+    // нормализирай непознат/начален маршрут към „home“, за да работят коректно картата и бутоните
+    var known = ['home', 'tree', 'harvest', 'care', 'log', 'stats', 'sales', 'buyer', 'settings', 'walk'];
+    if (known.indexOf(route.name) === -1) route.name = 'home';
     var body = '';
     switch (route.name) {
       case 'home': body = viewHome(); break;
@@ -1720,6 +1723,7 @@
     window.addEventListener('focus', function () { if (swReg) swReg.update().catch(function () {}); });
   }
 
+  if (db.currentUserId && route.name === 'login') route = { name: 'home', param: null };
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   render();
 })();
