@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.15.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.16.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -56,6 +56,19 @@
   function setCover(treeId, photoId) {
     var t = tree(treeId); if (!t) return;
     t.coverPhotoId = photoId;
+    save(); render();
+  }
+  // Изтрива снимка направо от дървото — работи и за старите (вградени) снимки.
+  function removePhoto(treeId, photoId) {
+    if (!confirm('Да изтрия ли тази снимка?')) return;
+    if (db.photos) db.photos = db.photos.filter(function (p) { return p.id !== photoId; });
+    var t = tree(treeId);
+    if (t) {
+      if (t.photos) t.photos = t.photos.filter(function (p) { return p.id !== photoId; }); // стар формат
+      if (t.coverPhotoId === photoId) t.coverPhotoId = null;
+    }
+    var ev = db.events.filter(function (e) { return e.type === 'photo' && e.photoId === photoId && !e.deletedAt; })[0];
+    if (ev) { ev.deletedAt = Date.now(); ev.deletedBy = db.currentUserId; }
     save(); render();
   }
   function variety(id) { return db.settings.varieties.find(function (v) { return v.id === id; }); }
@@ -541,11 +554,14 @@
             groups[g].map(function (p) {
               var isCover = lastPhoto && p.id && lastPhoto.id === p.id;
               return '<div style="flex:0 0 auto;text-align:center">' +
-                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover' + (isCover ? ';outline:3px solid var(--accent);outline-offset:-3px' : '') + '"/>' +
+                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover' + (isCover ? ';outline:3px solid var(--green);outline-offset:-3px' : '') + '"/>' +
                 '<div class="muted" style="font-size:11px;margin-top:4px">' + fmtDate(p.date) + '</div>' +
-                (p.id ? (isCover
-                  ? '<div style="font-size:11px;margin-top:2px;color:var(--accent);font-weight:700">⭐ Основна</div>'
-                  : '<button class="btn ghost sm" data-action="setcover:' + t.id + ':' + p.id + '" style="margin-top:2px;font-size:11px;padding:2px 8px">Направи основна</button>') : '') +
+                (p.id ? '<div style="margin-top:2px;display:flex;flex-direction:column;gap:3px;align-items:center">' +
+                  (isCover
+                    ? '<div style="font-size:11px;color:var(--green);font-weight:700">⭐ Основна</div>'
+                    : '<button class="btn ghost sm" data-action="setcover:' + t.id + ':' + p.id + '" style="font-size:11px;padding:2px 8px">Направи основна</button>') +
+                  '<button class="btn ghost sm" data-action="delphoto:' + t.id + ':' + p.id + '" style="font-size:11px;padding:2px 8px;color:var(--red)">🗑️ Изтрий</button>' +
+                  '</div>' : '') +
                 '</div>';
             }).join('') +
             '</div></div>';
@@ -1316,6 +1332,7 @@
       case 'sethealth': setHealth(parts[1], parts[2]); break;
       case 'addphoto': addPhoto(parts[1]); break;
       case 'setcover': setCover(parts[1], parts[2]); break;
+      case 'delphoto': removePhoto(parts[1], parts[2]); break;
 
       case 'editschema': if (isAdmin()) { editMode = !editMode; render(); } break;
       case 'addtree': sheetAddTree(parts[1], parseInt(parts[2], 10)); break;
