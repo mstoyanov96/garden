@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.12.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.12.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -23,6 +23,7 @@
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
+  var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
   var syncStatus = 'off';   // 'off' | 'connecting' | 'on' | 'error' — състояние на облачната синхронизация
 
   // ---- Helpers -----------------------------------------------------------
@@ -107,12 +108,26 @@
     if (!e) return;
     e.deletedAt = Date.now();
     e.deletedBy = db.currentUserId;
+    if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, true);
     save();
   }
   function restore(evId) {
     var e = db.events.find(function (x) { return x.id === evId; });
     if (!e) return;
-    e.deletedAt = null; e.deletedBy = null; save();
+    e.deletedAt = null; e.deletedBy = null;
+    if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, false);
+    save();
+  }
+  // Връща променените полета на дървото. toBefore=true → връща както е било;
+  // false → прилага отново (при възстановяване). Променя само акото няма по-нова промяна отгоре.
+  function revertTreeChanges(e, toBefore) {
+    var t = tree(e.treeId); if (!t) return;
+    Object.keys(e.changes).forEach(function (f) {
+      var ch = e.changes[f];
+      var expect = toBefore ? ch.after : ch.before;
+      var next = toBefore ? ch.before : ch.after;
+      if (JSON.stringify(t[f] == null ? null : t[f]) === JSON.stringify(expect == null ? null : expect)) t[f] = next;
+    });
   }
 
   // ---- Bucket math -------------------------------------------------------
@@ -1213,7 +1228,7 @@
       case 'mapselecttoggle':
         if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
         render(); break;
-      case 'treeedit': sheetTreeEdit(parts[1]); break;
+      case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note } : null; sheetTreeEdit(parts[1]); break; }
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
         if (treeHarvestOpen) { if (!harvestDraft[treeHarvestOpen]) harvestDraft[treeHarvestOpen] = {}; if (harvestDraft[treeHarvestOpen]._count == null) harvestDraft[treeHarvestOpen]._count = 1; }
@@ -1261,7 +1276,15 @@
       case 'hminus': stepHarvest(parts[1], -1); break;
       case 'savehcurrent': saveHarvest(); break;
 
-      case 'del': if (isAdmin() && confirm('Да изтрия ли записа? Ще се пази в историята.')) { softDelete(parts[1]); render(); } break;
+      case 'del': {
+        if (!isAdmin()) break;
+        var dev = db.events.find(function (x) { return x.id === parts[1]; });
+        var dmsg = (dev && dev.type === 'tree_edit' && dev.changes)
+          ? 'Да изтрия ли записа и да върна дървото както беше преди тази промяна?'
+          : 'Да изтрия ли записа? Ще се пази в историята.';
+        if (confirm(dmsg)) { softDelete(parts[1]); render(); }
+        break;
+      }
       case 'restore': if (isAdmin()) { restore(parts[1]); render(); } break;
 
       case 'newsale': sheetNewSale(); break;
@@ -1288,7 +1311,7 @@
       case 'checkupdate': checkForUpdate(); break;
       case 'applyupdate': applyUpdate(); break;
 
-      case 'closesheet': closeSheet(); break;
+      case 'closesheet': cancelTreeEdit(); closeSheet(); break;
     }
   });
 
@@ -1505,12 +1528,32 @@
   }
 
   function setHealth(id, h) { var t = tree(id); if (t) { t.health = h; } sheetTreeEdit(id); }
+  // Отказ от редакцията — връща здравето/сорта/бележката както бяха (setHealth ги променя на живо).
+  function cancelTreeEdit() {
+    if (!treeEditBefore) return;
+    var t = tree(treeEditBefore.id);
+    if (t) { t.health = treeEditBefore.health; t.varietyId = treeEditBefore.varietyId; t.note = treeEditBefore.note; save(); }
+    treeEditBefore = null;
+  }
   function saveTreeEdit(id) {
     var t = tree(id); if (!t) return;
-    t.varietyId = el('etVar').value;
-    t.note = el('etNote').value;
+    var before = (treeEditBefore && treeEditBefore.id === id) ? treeEditBefore : { health: t.health, varietyId: t.varietyId, note: t.note };
+    // формата „Състояние“ (sheetTreeEdit): etVar/etNote; редакторът на схемата (sheetEditTree): etCode/etVar2/etHealth2
+    var varEl = el('etVar'), noteEl = el('etNote'), codeEl = el('etCode'), var2El = el('etVar2'), health2El = el('etHealth2');
+    if (varEl) t.varietyId = varEl.value;
+    if (noteEl) t.note = noteEl.value;
+    if (var2El) t.varietyId = var2El.value;
+    if (health2El) t.health = health2El.value;
+    if (codeEl) t.code = (codeEl.value || t.code).trim();
+    var changes = {};
+    if (before.health !== t.health) changes.health = { before: before.health, after: t.health };
+    if (before.varietyId !== t.varietyId) changes.varietyId = { before: before.varietyId, after: t.varietyId };
+    if ((before.note || '') !== (t.note || '')) changes.note = { before: before.note || '', after: t.note || '' };
     save();
-    addEvent({ type: 'tree_edit', treeId: id, date: DB.todayISO(), note: 'състояние: ' + healthLabel(t.health) });
+    var ev = { type: 'tree_edit', treeId: id, date: DB.todayISO(), note: 'състояние: ' + healthLabel(t.health) };
+    if (Object.keys(changes).length) ev.changes = changes;
+    addEvent(ev);
+    treeEditBefore = null;
     closeSheet(); go('tree', id);
   }
 
@@ -1585,9 +1628,10 @@
     if (!navigator.geolocation) { alert('Телефонът не поддържа GPS.'); return; }
     alert('Застани до дървото и натисни OK. Изчакай координатите...');
     navigator.geolocation.getCurrentPosition(function (pos) {
+      var beforeGps = t.gps || null;
       t.gps = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy || 0), ts: Date.now() };
       save();
-      addEvent({ type: 'tree_edit', treeId: t.id, date: DB.todayISO(), note: 'записани GPS координати (±' + t.gps.acc + ' м)' });
+      addEvent({ type: 'tree_edit', treeId: t.id, date: DB.todayISO(), note: 'записани GPS координати (±' + t.gps.acc + ' м)', changes: { gps: { before: beforeGps, after: t.gps } } });
       alert('Записано! Точност ±' + t.gps.acc + ' м.');
       render();
     }, function (err) {
