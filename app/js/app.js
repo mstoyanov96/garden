@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1373,6 +1373,7 @@
 
   // ---- Offline indicator -------------------------------------------------
   var offlineTimer = null;
+  var offlineStrikes = 0;   // искаме 2 последователни провала, преди да покажем банера
   function setOffline(off) {
     document.body.classList.toggle('offline', !!off);
     if (off && !offlineTimer) offlineTimer = setInterval(probeOnline, 8000); // повтаряй докато се върне мрежата
@@ -1380,15 +1381,24 @@
   }
   function probeOnline() {
     // Не се доверяваме на navigator.onLine (на iOS PWA често лъже) — правим истинска заявка.
+    // Без cache:'no-store' (чупи fetch в инсталирано PWA на iOS); busting чрез ?ping.
     var ctrl = ('AbortController' in window) ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 6000) : null;
-    fetch('manifest.webmanifest?ping=' + Date.now(), { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
-      .then(function (r) { if (timer) clearTimeout(timer); setOffline(!r.ok); })
-      .catch(function () { if (timer) clearTimeout(timer); setOffline(true); });
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
+    function fail() {
+      offlineStrikes++;
+      if (offlineStrikes >= 2) setOffline(true);
+      else setTimeout(probeOnline, 2500); // потвърди с втори опит, преди банера
+    }
+    fetch('manifest.webmanifest?ping=' + Date.now(), ctrl ? { signal: ctrl.signal } : {})
+      .then(function (r) {
+        if (timer) clearTimeout(timer);
+        if (r && r.ok) { offlineStrikes = 0; setOffline(false); } else fail();
+      })
+      .catch(function () { if (timer) clearTimeout(timer); fail(); });
   }
   ['online', 'offline', 'pageshow', 'focus'].forEach(function (ev) { window.addEventListener(ev, probeOnline); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) probeOnline(); });
-  probeOnline();
+  setTimeout(probeOnline, 1500); // изчакай service worker-а да се активира преди първата проверка
 
   // ---- Service worker + обновяване --------------------------------------
   var swReg = null;
