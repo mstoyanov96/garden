@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -13,8 +13,10 @@
   var harvestBucket = '';    // избрана кофа при събиране
   var quickTarget = 'ground'; // 'ground' или 'tree' в бързия режим
   var quickTree = '';         // избрано дърво в бързия режим
+  var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране/бърз режим
   var careScope = 'all';    // 'all' | 'rows' | 'tree' — обхват на грижата
   var careRows = [];        // избрани редици (букви) когато careScope === 'rows'
+  var careTreePreset = '';  // предварително избрано дърво при грижа от профила на дърво
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
 
@@ -111,13 +113,14 @@
   // ---- Bucket math -------------------------------------------------------
   function eventKg(ev) {
     if (!ev.buckets) return 0;
+    var fill = (ev.fill != null ? ev.fill : 100) / 100; // колко пълни са били кофите
     var total = 0;
     Object.keys(ev.buckets).forEach(function (bid) {
       var b = bucket(bid); if (!b) return;
       var w = ev.state === 'clean' ? b.cleanKg : ev.state === 'shelled' ? b.shelledKg : b.greenKg;
       total += (ev.buckets[bid] || 0) * w;
     });
-    return total;
+    return total * fill;
   }
   function eventBuckets(ev) {
     if (!ev.buckets) return 0;
@@ -370,6 +373,13 @@
       (t.note ? '<div class="kv"><span class="k">📝 Бележка</span><span class="v">' + esc(t.note) + '</span></div>' : '') +
       '</div></div>' +
 
+      '<div class="section-title">Добави дейност</div>' +
+      '<div class="row mb">' +
+      '<button class="btn" data-action="treeharvest:' + t.id + '">🧺 Събиране</button>' +
+      '<button class="btn secondary" data-action="treecare:fertilize:' + t.id + '">🌱 Торене</button>' +
+      '</div>' +
+      '<button class="btn secondary mb" data-action="treecare:water:' + t.id + '">💧 Поливане</button>' +
+
       '<div class="row mb">' +
       '<button class="btn" data-action="addphoto:' + t.id + '">📷 Добави снимка</button>' +
       '<button class="btn secondary" data-action="treeedit:' + t.id + '">⚙️ Състояние</button>' +
@@ -412,6 +422,7 @@
           '<b>' + esc(b.name) + '</b><small>1 кофа ≈ ' + b.greenKg + ' кг</small></button>';
       }).join('') + '</div></div>';
     body += '<div class="field"><label>Дата</label><input id="hdate" type="date" class="input" value="' + today + '"/></div>';
+    body += fillChips();
 
     if (harvestMode === 'tree') {
       body += '<div class="section-title">Колко кофи от всяко дърво?</div>';
@@ -455,6 +466,14 @@
       '</div></div>';
   }
 
+  // чипове за запълване на кофата (%) — общо за събиране/бърз режим
+  function fillChips() {
+    return '<div class="field"><label>Колко пълни бяха кофите?</label><div class="rowfilter">' +
+      [100, 75, 50, 25].map(function (p) {
+        return '<button class="' + (harvestFill === p ? 'active' : '') + '" data-action="hfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
+      }).join('') + '</div></div>';
+  }
+
   // =======================================================================
   //  CARE (torene / polivane / kosene)
   // =======================================================================
@@ -463,7 +482,7 @@
     var today = DB.todayISO();
     var activeTrees = db.trees.filter(function (t) { return !t.deletedAt; });
     var treeOpts = activeTrees
-      .map(function (t) { return '<option value="' + t.id + '">Дърво ' + esc(t.code) + '</option>'; }).join('');
+      .map(function (t) { return '<option value="' + t.id + '"' + (t.id === careTreePreset ? ' selected' : '') + '>Дърво ' + esc(t.code) + '</option>'; }).join('');
 
     // налични редици (букви) по реда на картата
     var rowKeys = [];
@@ -543,7 +562,7 @@
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
-    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи · ' + Math.round(eventKg(e)) + ' кг';
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + Math.round(eventKg(e)) + ' кг';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -745,6 +764,8 @@
         }).join('') + '</select></div>';
     }
 
+    body += fillChips();
+
     body += db.settings.buckets.map(function (b) {
       return '<div class="bucket-big"><div class="pic">' + bucketIcon(b) + '</div>' +
         '<div class="t"><b>+1 ' + esc(b.name) + '</b><div class="muted" style="font-size:13px">1 кофа ≈ ' + b.greenKg + ' кг</div></div>' +
@@ -782,27 +803,39 @@
 
   function startWalk() {
     stopWalk(); // избегни дублирани слушатели при пре-рендиране
-    // компас (посока на телефона) — с изглаждане срещу трептене
-    walk.fx = null; walk.fy = null; walk.rot = 0;
+    // компас (посока на телефона) — със силно изглаждане срещу трептене в ръка
+    walk.fx = null; walk.fy = null; walk.rot = 0; walk.shown = null;
     function onOrient(e) {
       var hd = (typeof e.webkitCompassHeading === 'number') ? e.webkitCompassHeading
         : (e.alpha != null ? (360 - e.alpha) : null);
       if (hd == null) return;
-      // нискочестотен филтър върху вектора (sin/cos), за да работи и около 0°/360°
-      var rad = hd * Math.PI / 180, a = 0.12;
+      var rad = hd * Math.PI / 180;
       if (walk.fx == null) { walk.fx = Math.cos(rad); walk.fy = Math.sin(rad); }
-      else { walk.fx += a * (Math.cos(rad) - walk.fx); walk.fy += a * (Math.sin(rad) - walk.fy); }
+      else {
+        // адаптивно изглаждане: при малка промяна (трептене в ръка) филтрираме силно,
+        // при реално завъртане следваме бързо
+        var cur = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI; if (cur < 0) cur += 360;
+        var diff = Math.abs(((hd - cur + 540) % 360) - 180); // 0..180
+        var a = diff < 3 ? 0.03 : diff < 8 ? 0.08 : diff < 20 ? 0.2 : diff < 45 ? 0.4 : 0.6;
+        walk.fx += a * (Math.cos(rad) - walk.fx);
+        walk.fy += a * (Math.sin(rad) - walk.fy);
+      }
       var sm = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI;
       if (sm < 0) sm += 360;
       walk.heading = sm;
       // непрекъснато въртене по най-късия път (без скок при 359°→0°)
       var delta = sm - (walk.rot % 360);
       if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
-      if (Math.abs(delta) < 0.5) return; // малка мъртва зона срещу микро-трептене
+      if (Math.abs(delta) < 2) return; // по-голяма мъртва зона срещу микро-трептене в ръка
       walk.rot += delta;
       var needle = el('walkNeedle'), txt = el('walkHeading');
       if (needle) needle.style.transform = 'rotate(' + walk.rot.toFixed(1) + 'deg)';
-      if (txt) txt.textContent = Math.round(sm) + '° ' + compassName(sm);
+      // текстът се обновява само при осезаема промяна (>=3°), за да не мига числото
+      var shownDeg = Math.round(sm);
+      if (txt && (walk.shown == null || Math.abs(((shownDeg - walk.shown + 540) % 360) - 180) >= 3)) {
+        walk.shown = shownDeg;
+        txt.textContent = shownDeg + '° ' + compassName(sm);
+      }
     }
     walk.orient = onOrient;
     function attachOrient() {
@@ -878,6 +911,25 @@
   }
   function closeSheet() { el('sheet').classList.remove('open'); el('sheet').innerHTML = ''; }
 
+  function sheetTreeHarvest(id) {
+    var t = tree(id); if (!t) return;
+    openSheet('<h3>🧺 Събиране — дърво ' + esc(t.code) + '</h3>' +
+      '<div class="field"><label>Коя кофа?</label><select id="thBucket" class="input">' +
+      db.settings.buckets.map(function (b) {
+        return '<option value="' + b.id + '"' + (b.id === harvestBucket ? ' selected' : '') + '>' + esc(b.name) + ' (≈ ' + b.greenKg + ' кг)</option>';
+      }).join('') + '</select></div>' +
+      '<div class="field"><label>Колко кофи?</label><input id="thCount" type="number" class="input" value="1" min="0" step="1"/></div>' +
+      '<div class="field"><label>Колко пълна беше кофата?</label><select id="thFill" class="input">' +
+      '<option value="100">Пълна (100%)</option>' +
+      '<option value="75">¾ пълна (75%)</option>' +
+      '<option value="50">Половин (50%)</option>' +
+      '<option value="25">¼ пълна (25%)</option>' +
+      '</select></div>' +
+      '<div class="field"><label>Дата</label><input id="thDate" type="date" class="input" value="' + DB.todayISO() + '"/></div>' +
+      '<button class="btn" data-action="savetreeharvest:' + id + '">💾 Запази</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+
   function sheetTreeEdit(id) {
     var t = tree(id);
     openSheet('<h3>Състояние на дърво ' + esc(t.code) + '</h3>' +
@@ -950,6 +1002,9 @@
 
       case 'tree': go('tree', parts[1]); break;
       case 'treeedit': sheetTreeEdit(parts[1]); break;
+      case 'treeharvest': sheetTreeHarvest(parts[1]); break;
+      case 'savetreeharvest': saveTreeHarvest(parts[1]); break;
+      case 'treecare': careTab = parts[1]; careScope = 'tree'; careTreePreset = parts[2]; go('care'); break;
       case 'savetree': saveTreeEdit(parts[1]); break;
       case 'savegps': saveGps(parts[1]); break;
       case 'sethealth': setHealth(parts[1], parts[2]); break;
@@ -969,7 +1024,7 @@
       case 'addzone': addZone(); break;
       case 'delzone': deleteZone(parts[1]); break;
 
-      case 'care': careTab = parts[1]; go('care'); break;
+      case 'care': careTab = parts[1]; careScope = 'all'; careTreePreset = ''; go('care'); break;
       case 'ctab': careTab = parts[1]; render(); break;
       case 'cscope': careScope = parts[1]; render(); break;
       case 'crow': {
@@ -983,6 +1038,7 @@
       case 'hmode': harvestMode = parts[1]; render(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
+      case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
       case 'hplus': stepHarvest(parts[1], 1); break;
       case 'hminus': stepHarvest(parts[1], -1); break;
       case 'savehcurrent': saveHarvest(); break;
@@ -1273,9 +1329,9 @@
       if (cnt <= 0) return;
       var buckets = {}; buckets[bucketId] = cnt;
       if (key === 'ground') {
-        addEvent({ type: 'harvest_ground', date: date, state: 'green', buckets: buckets });
+        addEvent({ type: 'harvest_ground', date: date, state: 'green', buckets: buckets, fill: harvestFill });
       } else {
-        addEvent({ type: 'harvest_tree', treeId: key, date: date, state: 'green', buckets: buckets });
+        addEvent({ type: 'harvest_tree', treeId: key, date: date, state: 'green', buckets: buckets, fill: harvestFill });
       }
       saved++;
     });
@@ -1290,11 +1346,25 @@
       var tid = el('qtree') ? el('qtree').value : quickTree;
       if (!tid) { alert('Избери дърво.'); return; }
       quickTree = tid;
-      addEvent({ type: 'harvest_tree', treeId: tid, date: DB.todayISO(), state: 'green', buckets: buckets, quick: true });
+      addEvent({ type: 'harvest_tree', treeId: tid, date: DB.todayISO(), state: 'green', buckets: buckets, fill: harvestFill, quick: true });
     } else {
-      addEvent({ type: 'harvest_ground', date: DB.todayISO(), state: 'green', buckets: buckets, quick: true });
+      addEvent({ type: 'harvest_ground', date: DB.todayISO(), state: 'green', buckets: buckets, fill: harvestFill, quick: true });
     }
     render();
+  }
+
+  function saveTreeHarvest(id) {
+    var t = tree(id); if (!t) return;
+    var bid = el('thBucket') ? el('thBucket').value : db.settings.buckets[0].id;
+    var cnt = el('thCount') ? (parseInt(el('thCount').value, 10) || 0) : 0;
+    var fill = el('thFill') ? (parseInt(el('thFill').value, 10) || 100) : 100;
+    var date = (el('thDate') && el('thDate').value) ? el('thDate').value : DB.todayISO();
+    if (cnt <= 0) { alert('Въведи поне 1 кофа.'); return; }
+    var buckets = {}; buckets[bid] = cnt;
+    addEvent({ type: 'harvest_tree', treeId: id, date: date, state: 'green', buckets: buckets, fill: fill });
+    closeSheet();
+    alert('Записано!');
+    go('tree', id);
   }
 
   function saveGps(id) {
