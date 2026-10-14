@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.7';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -126,6 +126,11 @@
     if (!ev.buckets) return 0;
     return Object.keys(ev.buckets).reduce(function (s, k) { return s + (ev.buckets[k] || 0); }, 0);
   }
+  // показва килограми с до 3 десетични знака, без излишни нули (напр. 3.75, 10, 0.5)
+  function fmtKg(n) {
+    n = Math.round(((n || 0) + Number.EPSILON) * 1000) / 1000;
+    return n.toFixed(3).replace(/\.?0+$/, '');
+  }
 
   // =======================================================================
   //  NAVIGATION
@@ -230,7 +235,7 @@
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row">' +
       '<div class="stat green"><b>' + todayBuckets + '</b><small>кофи днес</small></div>' +
-      '<div class="stat blue"><b>' + Math.round(todayKg) + '</b><small>кг (зелени) днес</small></div>' +
+      '<div class="stat blue"><b>' + fmtKg(todayKg) + '</b><small>кг (зелени) днес</small></div>' +
       '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
       '</div>' +
 
@@ -369,7 +374,7 @@
       (treeDetailsOpen ? '<div id="treeDetails" style="margin-top:6px">' +
         '<div class="kv"><span class="k">📍 Ред / Колона</span><span class="v">' + esc(t.row) + ' / ' + t.col + '</span></div>' +
         '<div class="kv"><span class="k">🗓️ Посадено</span><span class="v">' + fmtDate(t.plantedAt) + '</span></div>' +
-        '<div class="kv"><span class="k">🧺 Добив сезон</span><span class="v">' + Math.round(seasonKg) + ' кг</span></div>' +
+        '<div class="kv"><span class="k">🧺 Добив сезон</span><span class="v">' + fmtKg(seasonKg) + ' кг</span></div>' +
         '<div class="kv"><span class="k">🛰️ GPS</span><span class="v">' + (gps ? gps.lat.toFixed(5) + ', ' + gps.lng.toFixed(5) : '—') + '</span></div>' +
         (t.note ? '<div class="kv"><span class="k">📝 Бележка</span><span class="v">' + esc(t.note) + '</span></div>' : '') +
         '</div>' : '') +
@@ -473,7 +478,7 @@
 
     body += '<div class="card mt" style="display:flex;justify-content:space-between;align-items:center">' +
       '<div><small class="muted">Днес събрано общо</small><div style="font-size:20px;font-weight:800">' +
-      Math.round(todayKg) + ' кг · ' + todayBuckets + ' кофи</div></div>' +
+      fmtKg(todayKg) + ' кг · ' + todayBuckets + ' кофи</div></div>' +
       '<button class="btn sm" data-action="savehcurrent">Запази</button></div>';
 
     body += '<button class="btn mt" data-action="savehcurrent">💾 Запази събраното</button>';
@@ -593,7 +598,7 @@
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
-    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + Math.round(eventKg(e)) + ' кг';
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -645,8 +650,8 @@
 
     return topbar('Статистика', { back: 'nav:home' }) + '<div class="content">' +
       '<div class="stat-row">' +
-      '<div class="stat green"><b>' + Math.round(totalKg) + '</b><small>общо събрани (кг)</small></div>' +
-      '<div class="stat blue"><b>' + Math.round(soldKg) + '</b><small>продадени (кг)</small></div>' +
+      '<div class="stat green"><b>' + fmtKg(totalKg) + '</b><small>общо събрани (кг)</small></div>' +
+      '<div class="stat blue"><b>' + fmtKg(soldKg) + '</b><small>продадени (кг)</small></div>' +
       '<div class="stat purple"><b>' + revenue.toFixed(0) + '</b><small>приходи (€)</small></div>' +
       '</div>' +
       '<div class="section-title">Добив по месеци — ' + year + ' (кг)</div>' +
@@ -658,7 +663,7 @@
       '<div class="card">' + (ranked.length ? ranked.map(function (r) {
         return '<div class="rank-row"><span class="nm">' + esc(r.t.code) + '</span>' +
           '<div class="track"><div class="fill" style="width:' + ((r.kg / maxR) * 100) + '%"></div></div>' +
-          '<span class="kg">' + Math.round(r.kg) + ' кг</span></div>';
+          '<span class="kg">' + fmtKg(r.kg) + ' кг</span></div>';
       }).join('') : '<p class="muted">Още няма данни за добив по дървета.</p>') + '</div>' +
       '</div>';
   }
@@ -677,7 +682,7 @@
           '<div style="display:flex;align-items:center;gap:12px">' +
           '<div class="avatar">' + initials(b.name) + '</div>' +
           '<div style="flex:1"><b>' + esc(b.name) + '</b><div class="muted" style="font-size:13px">' + esc(b.phone || '') + '</div>' +
-          '<div class="muted" style="font-size:12px">' + purchases.length + ' покупки · ' + Math.round(kg) + ' кг</div></div>' +
+          '<div class="muted" style="font-size:12px">' + purchases.length + ' покупки · ' + fmtKg(kg) + ' кг</div></div>' +
           '<span style="font-size:22px;color:var(--muted)">›</span></div></div>';
       }).join('') +
       '<button class="btn ghost mt" data-action="newbuyer">➕ Нов купувач</button>' +
@@ -799,29 +804,31 @@
   function startWalk() {
     stopWalk(); // избегни дублирани слушатели при пре-рендиране
     // компас (посока на телефона) — със силно изглаждане срещу трептене в ръка
-    walk.fx = null; walk.fy = null; walk.rot = 0; walk.shown = null;
+    walk.fx = null; walk.fy = null; walk.rot = 0; walk.shown = null; walk.buf = [];
     function onOrient(e) {
       var hd = (typeof e.webkitCompassHeading === 'number') ? e.webkitCompassHeading
         : (e.alpha != null ? (360 - e.alpha) : null);
       if (hd == null) return;
       var rad = hd * Math.PI / 180;
-      if (walk.fx == null) { walk.fx = Math.cos(rad); walk.fy = Math.sin(rad); }
-      else {
-        // адаптивно изглаждане: при малка промяна (трептене в ръка) филтрираме силно,
-        // при реално завъртане следваме бързо
-        var cur = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI; if (cur < 0) cur += 360;
-        var diff = Math.abs(((hd - cur + 540) % 360) - 180); // 0..180
-        var a = diff < 3 ? 0.03 : diff < 8 ? 0.08 : diff < 20 ? 0.2 : diff < 45 ? 0.4 : 0.6;
-        walk.fx += a * (Math.cos(rad) - walk.fx);
-        walk.fy += a * (Math.sin(rad) - walk.fy);
-      }
+      // медианен филтър на вектора (cos/sin) по последните 5 отчета — маха единичните „скокове“
+      walk.buf.push([Math.cos(rad), Math.sin(rad)]);
+      if (walk.buf.length > 5) walk.buf.shift();
+      var cs = walk.buf.map(function (p) { return p[0]; }).sort(function (a, b) { return a - b; });
+      var ss = walk.buf.map(function (p) { return p[1]; }).sort(function (a, b) { return a - b; });
+      var mid = Math.floor(walk.buf.length / 2);
+      var mc = cs[mid], ms = ss[mid];
+      // плавно изглаждане върху изчистената от скокове стойност
+      var a = 0.18;
+      if (walk.fx == null) { walk.fx = mc; walk.fy = ms; }
+      else { walk.fx += a * (mc - walk.fx); walk.fy += a * (ms - walk.fy); }
       var sm = Math.atan2(walk.fy, walk.fx) * 180 / Math.PI;
       if (sm < 0) sm += 360;
       walk.heading = sm;
       // непрекъснато въртене по най-късия път (без скок при 359°→0°)
       var delta = sm - (walk.rot % 360);
       if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
-      if (Math.abs(delta) < 2) return; // по-голяма мъртва зона срещу микро-трептене в ръка
+      if (Math.abs(delta) < 2) return; // мъртва зона срещу микро-трептене в ръка
+      if (delta > 12) delta = 12; else if (delta < -12) delta = -12; // таван на стъпката срещу внезапни скокове
       walk.rot += delta;
       var needle = el('walkNeedle'), txt = el('walkHeading');
       if (needle) needle.style.transform = 'rotate(' + walk.rot.toFixed(1) + 'deg)';
