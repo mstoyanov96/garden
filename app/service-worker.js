@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v21';              // ← увеличавай при нова версия
+var VERSION = 'v22';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
@@ -34,6 +34,9 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin !== location.origin) return;
+
+  // проверка за връзка — само мрежа, без резервен кеш (за коректен офлайн индикатор)
+  if (url.searchParams.has('ping')) { e.respondWith(fetch(req)); return; }
 
   // Network-first: винаги пробваме мрежата (свежа версия), при липса — от кеша.
   e.respondWith(

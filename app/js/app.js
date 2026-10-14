@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.9.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.9.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -232,10 +232,11 @@
       '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
       '</div>' +
 
-      '<div class="section-title title-row">Карта на градината' +
-      (isAdmin() ? '<button class="iconbtn' + (editMode ? ' on' : '') + '" data-action="editschema" aria-label="Редактирай схемата">' + (editMode ? '✓' : '✏️') + '</button>' : '') +
+      '<div class="section-title title-row"><span class="tl">Карта на градината' +
+      (isAdmin() ? ' <button class="iconbtn' + (editMode ? ' on' : '') + '" data-action="editschema" aria-label="Редактирай схемата">' + (editMode ? '✓' : '✏️') + '</button>' : '') +
+      '</span>' +
+      (editMode ? '' : '<button class="btn sm secondary walkbtn" data-action="nav:walk">🧭 Къде съм</button>') +
       '</div>' +
-      (editMode ? '' : '<button class="btn secondary mb" data-action="nav:walk">🧭 Разходка — къде съм в градината</button>') +
       (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, или зона (Градина, Къща…) за да ѝ смениш мястото и размера.</div>' : '') +
       (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
@@ -1371,10 +1372,22 @@
   }
 
   // ---- Offline indicator -------------------------------------------------
-  function updateOnline() { document.body.classList.toggle('offline', !navigator.onLine); }
-  window.addEventListener('online', updateOnline);
-  window.addEventListener('offline', updateOnline);
-  updateOnline();
+  var offlineTimer = null;
+  function setOffline(off) {
+    document.body.classList.toggle('offline', !!off);
+    if (off && !offlineTimer) offlineTimer = setInterval(probeOnline, 8000); // повтаряй докато се върне мрежата
+    if (!off && offlineTimer) { clearInterval(offlineTimer); offlineTimer = null; }
+  }
+  function probeOnline() {
+    if (!navigator.onLine) { setOffline(true); return; }
+    // активна проверка (заобикаля кеша на service worker чрез ?ping)
+    fetch('manifest.webmanifest?ping=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { setOffline(!r.ok); })
+      .catch(function () { setOffline(true); });
+  }
+  ['online', 'offline', 'pageshow', 'focus'].forEach(function (ev) { window.addEventListener(ev, probeOnline); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) probeOnline(); });
+  probeOnline();
 
   // ---- Service worker + обновяване --------------------------------------
   var swReg = null;

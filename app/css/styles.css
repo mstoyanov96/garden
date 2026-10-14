@@ -76,9 +76,11 @@ img{max-width:100%;display:block;}
 .content{padding:16px 16px 96px;}
 .h2{font-size:21px;font-weight:800;margin:4px 2px 14px;}
 .section-title{font-size:16px;font-weight:700;margin:20px 2px 10px;color:var(--ink);}
-.section-title.title-row{display:flex;align-items:center;justify-content:space-between;}
-.iconbtn{width:38px;height:38px;border-radius:12px;background:#eef1ee;display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto;}
+.section-title.title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.section-title.title-row .tl{display:inline-flex;align-items:center;gap:8px;}
+.iconbtn{width:32px;height:32px;border-radius:10px;background:#eef1ee;display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto;}
 .iconbtn.on{background:var(--green);color:#fff;}
+.walkbtn{flex:0 0 auto;white-space:nowrap;}
 details.sect{margin:12px 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;}
 details.sect>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:16px;font-size:16px;font-weight:700;color:var(--ink);}
 details.sect>summary::-webkit-details-marker{display:none;}
@@ -330,8 +332,12 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .login .panel p.sub{color:var(--muted);margin-bottom:22px;}
 
 /* ---- Offline banner ---------------------------------------------------- */
-.offline-bar{display:none;background:#fff7e6;color:#9a6b11;text-align:center;font-size:13px;font-weight:600;padding:7px;}
-body.offline .offline-bar{display:block;}
+.offline-bar{display:none;align-items:center;justify-content:center;gap:8px;
+  background:linear-gradient(180deg,#fde7c7,#fbdcb0);color:#8a5a12;
+  border-bottom:1px solid #f0cf9b;text-align:center;font-size:13px;font-weight:700;
+  padding:9px 14px;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+body.offline .offline-bar{display:flex;animation:offslide .25s ease;}
+@keyframes offslide{from{opacity:0;transform:translateY(-100%);}to{opacity:1;transform:translateY(0);}}
 
 /* ---- Update banner ----------------------------------------------------- */
 .update-bar{
