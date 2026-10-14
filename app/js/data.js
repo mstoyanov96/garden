@@ -136,27 +136,15 @@
     try { db = JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
     // миграции за стари инсталации (пазим съществуващите данни)
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
-    if (migratePhotos(db)) save(db);
+    if (!db.photos) { db.photos = []; save(db); }
     return db;
   }
 
-  // Премества снимките от стария формат (tree.photos) към общия db.photos масив.
-  // Така всяка снимка е отделен документ и телата на дърветата остават малки.
+  // Гарантира, че db.photos съществува. НЕ мести/трие стари снимки от tree.photos —
+  // те се четат заедно с новите, за да не се губят при синхронизация.
   function migratePhotos(db) {
-    if (!db.photos) db.photos = [];
-    var moved = false;
-    (db.trees || []).forEach(function (t) {
-      if (t.photos && t.photos.length) {
-        t.photos.forEach(function (p) {
-          if (!p || !p.id) return;
-          if (!p.treeId) p.treeId = t.id;
-          if (!db.photos.some(function (x) { return x.id === p.id; })) db.photos.push(p);
-        });
-        t.photos = [];
-        moved = true;
-      }
-    });
-    return moved;
+    if (!db.photos) { db.photos = []; return true; }
+    return false;
   }
 
   function save(db) {
