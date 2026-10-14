@@ -130,8 +130,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 
 /* ---- Segmented control ------------------------------------------------- */
 .seg{display:flex;background:#eef1ee;border-radius:14px;padding:5px;gap:5px;margin-bottom:16px;}
-.seg button{flex:1;height:44px;border-radius:10px;font-weight:700;color:var(--muted);font-size:15px;}
-.seg button.active{background:var(--card);color:var(--green-dark);box-shadow:var(--shadow);}
+.seg button{flex:1;height:44px;border-radius:10px;font-weight:700;color:var(--green-dark);font-size:15px;background:var(--card);box-shadow:var(--shadow);}
+.seg button.active{background:var(--green);color:#fff;box-shadow:var(--shadow);}
 .rowfilter{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .rowfilter button{min-width:40px;height:40px;padding:0 10px;border-radius:12px;background:#eef1ee;color:var(--muted);font-weight:700;font-size:15px;}
 .rowfilter button.active{background:var(--green);color:#fff;box-shadow:var(--shadow);}

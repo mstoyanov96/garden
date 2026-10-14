@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.10.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.10.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -469,9 +469,14 @@
   // чипове за запълване на кофата (%) — общо за събиране/бърз режим
   function fillChips() {
     return '<div class="field"><label>Колко пълни бяха кофите?</label><div class="rowfilter">' +
-      [100, 75, 50, 25].map(function (p) {
+      [100, 75, 50, 25, 10, 5].map(function (p) {
         return '<button class="' + (harvestFill === p ? 'active' : '') + '" data-action="hfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div>' +
+      '<div class="stepper" style="margin-top:8px">' +
+      '<button data-action="hfillstep:-5">−5%</button>' +
+      '<span class="val" style="min-width:64px">' + harvestFill + '%</span>' +
+      '<button data-action="hfillstep:5">+5%</button>' +
+      '</div></div>';
   }
 
   // =======================================================================
@@ -920,10 +925,13 @@
       }).join('') + '</select></div>' +
       '<div class="field"><label>Колко кофи?</label><input id="thCount" type="number" class="input" value="1" min="0" step="1"/></div>' +
       '<div class="field"><label>Колко пълна беше кофата?</label><select id="thFill" class="input">' +
-      '<option value="100">Пълна (100%)</option>' +
-      '<option value="75">¾ пълна (75%)</option>' +
-      '<option value="50">Половин (50%)</option>' +
-      '<option value="25">¼ пълна (25%)</option>' +
+      (function () {
+        var o = '';
+        for (var p = 100; p >= 5; p -= 5) {
+          o += '<option value="' + p + '">' + (p === 100 ? 'Пълна (100%)' : p + '%') + '</option>';
+        }
+        return o;
+      })() +
       '</select></div>' +
       '<div class="field"><label>Дата</label><input id="thDate" type="date" class="input" value="' + DB.todayISO() + '"/></div>' +
       '<button class="btn" data-action="savetreeharvest:' + id + '">💾 Запази</button>' +
@@ -1039,6 +1047,7 @@
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
+      case 'hfillstep': harvestFill = Math.max(5, Math.min(100, harvestFill + (parseInt(parts[1], 10) || 0))); render(); break;
       case 'hplus': stepHarvest(parts[1], 1); break;
       case 'hminus': stepHarvest(parts[1], -1); break;
       case 'savehcurrent': saveHarvest(); break;
