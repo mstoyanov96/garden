@@ -117,6 +117,7 @@
       users: users,
       trees: trees,
       events: [],             // уеднаквен дневник: water/fertilize/harvest_tree/harvest_ground/mow/photo/note/tree_edit
+      photos: [],             // снимките са отделни записи (всяка → собствен документ в облака, за да не се превишава лимитът)
       buyers: buyers,
       sales: []
     };
@@ -135,7 +136,27 @@
     try { db = JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
     // миграции за стари инсталации (пазим съществуващите данни)
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
+    if (migratePhotos(db)) save(db);
     return db;
+  }
+
+  // Премества снимките от стария формат (tree.photos) към общия db.photos масив.
+  // Така всяка снимка е отделен документ и телата на дърветата остават малки.
+  function migratePhotos(db) {
+    if (!db.photos) db.photos = [];
+    var moved = false;
+    (db.trees || []).forEach(function (t) {
+      if (t.photos && t.photos.length) {
+        t.photos.forEach(function (p) {
+          if (!p || !p.id) return;
+          if (!p.treeId) p.treeId = t.id;
+          if (!db.photos.some(function (x) { return x.id === p.id; })) db.photos.push(p);
+        });
+        t.photos = [];
+        moved = true;
+      }
+    });
+    return moved;
   }
 
   function save(db) {
@@ -158,6 +179,7 @@
     save: save,
     reset: reset,
     seed: seed,
-    defaultZones: defaultZones
+    defaultZones: defaultZones,
+    migratePhotos: migratePhotos
   };
 })(window);

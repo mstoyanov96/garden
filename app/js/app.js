@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.12.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.13.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -36,6 +36,12 @@
   function isOwner() { var m = me(); return m && (m.isOwner || m.id === db.ownerId); }
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
   function tree(id) { return db.trees.find(function (t) { return t.id === id; }); }
+  function treePhotos(id) {
+    var out = (db.photos || []).filter(function (p) { return p.treeId === id; });
+    var t = tree(id);
+    if (t && t.photos && t.photos.length) out = out.concat(t.photos); // съвместимост със стар формат
+    return out.slice().sort(function (a, b) { return (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
+  }
   function variety(id) { return db.settings.varieties.find(function (v) { return v.id === id; }); }
   function bucket(id) { return db.settings.buckets.find(function (b) { return b.id === id; }); }
   var BUCKET_IMG = { buc_cheese: 'assets/bucket_cheese.png', buc_black: 'assets/bucket_black.png', buc_small: 'assets/bucket_round.png' };
@@ -117,6 +123,15 @@
     e.deletedAt = null; e.deletedBy = null;
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, false);
     save();
+  }
+  // Сърце-реакция — всеки (работник и админ) може да хареса/отхаресва запис.
+  function toggleReaction(evId) {
+    var e = db.events.find(function (x) { return x.id === evId; });
+    if (!e || !db.currentUserId) return;
+    if (!e.reactions) e.reactions = [];
+    var i = e.reactions.indexOf(db.currentUserId);
+    if (i === -1) e.reactions.push(db.currentUserId); else e.reactions.splice(i, 1);
+    save(); render();
   }
   // Връща променените полета на дървото. toBefore=true → връща както е било;
   // false → прилага отново (при възстановяване). Променя само акото няма по-нова промяна отгоре.
@@ -239,9 +254,10 @@
   // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
   function applyCloudSnapshot(cloud) {
     var keepUser = db.currentUserId;
-    ['trees', 'events', 'buyers', 'sales', 'users'].forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
+    ['trees', 'events', 'buyers', 'sales', 'users', 'photos'].forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
     if (cloud.settings) db.settings = cloud.settings;
     db.currentUserId = keepUser;
+    DB.migratePhotos(db);
     DB.save(db);
     render();
   }
@@ -250,7 +266,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { DB.save(db); if (!isSheetOpen()) render(); },
+      onRemote: function () { DB.migratePhotos(db); DB.save(db); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
@@ -446,11 +462,12 @@
     if (!t) return topbar('Дърво', { back: 'nav:home' }) + '<div class="content"><p>Няма такова дърво.</p></div>';
     var v = variety(t.varietyId);
     var evs = activeEvents().filter(function (e) { return e.treeId === id; });
-    var lastPhoto = t.photos.length ? t.photos[t.photos.length - 1] : null;
+    var photos = treePhotos(id);
+    var lastPhoto = photos.length ? photos[photos.length - 1] : null;
 
     // снимки групирани по година+сезон
     var groups = {};
-    t.photos.forEach(function (p) { var key = season(p.date) + ' ' + new Date(p.date).getFullYear(); (groups[key] = groups[key] || []).push(p); });
+    photos.forEach(function (p) { var key = season(p.date) + ' ' + new Date(p.date).getFullYear(); (groups[key] = groups[key] || []).push(p); });
 
     var seasonKg = evs.filter(function (e) { return e.type === 'harvest_tree'; }).reduce(function (s, e) { return s + eventKg(e); }, 0);
     var gps = treeGPS(t);
@@ -490,10 +507,14 @@
       '</div>' +
       (isAdmin() ? '<button class="btn secondary mb" data-action="savegps:' + t.id + '">🛰️ ' + (gps ? 'Обнови GPS тук' : 'Запиши GPS координатите тук') + '</button>' : '') +
 
-      (t.photos.length ? '<div class="section-title">Снимки по сезони (' + t.photos.length + ')</div>' +
+      (photos.length ? '<div class="section-title">Снимки по сезони (' + photos.length + ')</div>' +
         Object.keys(groups).map(function (g) {
           return '<div class="card"><b>' + esc(g) + '</b><div style="display:flex;gap:8px;overflow:auto;margin-top:10px">' +
-            groups[g].map(function (p) { return '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover"/>'; }).join('') +
+            groups[g].map(function (p) {
+              return '<div style="flex:0 0 auto;text-align:center">' +
+                '<img src="' + p.data + '" style="width:90px;height:90px;border-radius:12px;object-fit:cover"/>' +
+                '<div class="muted" style="font-size:11px;margin-top:4px">' + fmtDate(p.date) + '</div></div>';
+            }).join('') +
             '</div></div>';
         }).join('') : '') +
 
@@ -715,10 +736,15 @@
     var onBehalf = e.onBehalfOf ? ' (от името на ' + esc(e.onBehalfOf) + ')' : '';
     var deleted = e.deletedAt;
     var scopeLbl = t ? ' · ' + esc(t.code) : (e.rows && e.rows.length ? ' · редове ' + esc(e.rows.join(', ')) : '');
+    var reacts = e.reactions || [];
+    var liked = reacts.indexOf(db.currentUserId) !== -1;
+    var reactBtn = '<button class="heartbtn' + (liked ? ' on' : '') + '" data-action="react:' + e.id + '" aria-label="Реагирай със сърце">' +
+      (liked ? '❤️' : '🤍') + (reacts.length ? ' <span class="hc">' + reacts.length + '</span>' : '') + '</button>';
     return '<div class="list-row"' + (deleted ? ' style="opacity:.5"' : '') + '>' +
       '<div class="ic ' + m.cls + '">' + m.ic + '</div>' +
       '<div class="tx"><b>' + m.t + scopeLbl + (deleted ? ' <span class="badge orange">изтрито</span>' : '') + '</b>' +
-      '<small>' + detail + ' — ' + (who ? esc(who.name) : '?') + onBehalf + '</small></div>' +
+      '<small>' + detail + ' — ' + (who ? esc(who.name) : '?') + onBehalf + '</small>' +
+      '<div class="reacts">' + reactBtn + '</div></div>' +
       '<div class="meta">' + fmtDate(e.date) +
       (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>'
         : '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
@@ -805,7 +831,7 @@
       '<div class="card"><div style="display:flex;gap:12px;align-items:center">' +
       '<div class="avatar" style="width:52px;height:52px;font-size:19px">' + initials(b.name) + '</div>' +
       '<div style="flex:1"><b style="font-size:19px">' + esc(b.name) + '</b><div class="muted">' + esc(b.phone || '') + '</div></div>' +
-      (isAdmin() ? '<button class="btn sm secondary" data-action="editbuyer:' + b.id + '">✏️ Редактирай</button>' : '') + '</div>' +
+      '<button class="btn sm secondary" data-action="editbuyer:' + b.id + '">✏️ Редактирай</button></div>' +
       (b.note ? '<p class="mt">' + esc(b.note) + '</p>' : '') + '</div>' +
       '<div class="section-title">История на покупки</div>' +
       '<div class="card">' + (purchases.length ? purchases.map(function (s) {
@@ -837,24 +863,38 @@
       '<details class="sect"><summary>🪣 Кофи и тегло</summary><div class="sect-body">' +
       '<p class="muted mb" style="font-size:13px">Колко кг е 1 кофа — зелени / обелени с черупка / чиста ядка. (Обелените с черупка са винаги в кофата от сирене.)</p>' +
       db.settings.buckets.map(function (b) {
-        return '<div class="card"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
+        var head = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
           '<div style="width:48px;height:48px;border-radius:12px;background:var(--green-soft);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;padding:4px">' + bucketIcon(b) + '</div>' +
-          '<div><b>' + esc(b.name) + '</b><div class="muted" style="font-size:13px">' + esc(b.capacityNote || '') + '</div></div></div>' +
+          '<div><b>' + esc(b.name) + '</b><div class="muted" style="font-size:13px">' + esc(b.capacityNote || '') + '</div></div></div>';
+        if (!isAdmin()) {
+          return '<div class="card">' + head +
+            '<div class="kv"><span class="k">Вместимост</span><span class="v">' + (b.liters != null ? b.liters + ' л' : '—') + '</span></div>' +
+            '<div class="kv"><span class="k">Зелени</span><span class="v">' + b.greenKg + ' кг</span></div>' +
+            '<div class="kv"><span class="k">С черупка</span><span class="v">' + b.shelledKg + ' кг</span></div>' +
+            '<div class="kv"><span class="k">Чиста ядка</span><span class="v">' + b.cleanKg + ' кг</span></div></div>';
+        }
+        return '<div class="card">' + head +
           '<div class="field"><label>Вместимост (литри)</label><input class="input" type="number" value="' + (b.liters != null ? b.liters : '') + '" data-bkg="liters:' + b.id + '"/></div>' +
           '<div class="row"><div class="field"><label>Зелени (кг)</label><input class="input" type="number" value="' + b.greenKg + '" data-bkg="green:' + b.id + '"/></div>' +
           '<div class="field"><label>С черупка</label><input class="input" type="number" value="' + b.shelledKg + '" data-bkg="shelled:' + b.id + '"/></div>' +
           '<div class="field"><label>Чиста ядка</label><input class="input" type="number" value="' + b.cleanKg + '" data-bkg="clean:' + b.id + '"/></div></div></div>';
       }).join('') +
-      '<button class="btn secondary mb" data-action="savebuckets">💾 Запази теглата на кофите</button>' +
+      (isAdmin() ? '<button class="btn secondary mb" data-action="savebuckets">💾 Запази теглата на кофите</button>' : '') +
       '</div></details>' +
 
       '<details class="sect"><summary>📐 Калкулатор за рандеман</summary><div class="sect-body">' +
-      '<div class="card"><div class="row">' +
-      '<div class="field"><label>Вход — сухи с черупка (кг)</label><input id="yin" class="input" type="number" value="' + s.yieldInputKg + '"/></div>' +
-      '<div class="field"><label>Изход — чиста ядка (кг)</label><input id="yout" class="input" type="number" value="' + s.yieldOutputKg + '"/></div></div>' +
-      '<div class="center" style="font-size:20px;font-weight:800;color:var(--green-dark)">Рандеман: ' +
-      Math.round((s.yieldOutputKg / (s.yieldInputKg || 1)) * 100) + '%</div>' +
-      '<button class="btn secondary mt" data-action="savecalc">Изчисли / Запази</button></div>' +
+      (isAdmin()
+        ? '<div class="card"><div class="row">' +
+          '<div class="field"><label>Вход — сухи с черупка (кг)</label><input id="yin" class="input" type="number" value="' + s.yieldInputKg + '"/></div>' +
+          '<div class="field"><label>Изход — чиста ядка (кг)</label><input id="yout" class="input" type="number" value="' + s.yieldOutputKg + '"/></div></div>' +
+          '<div class="center" style="font-size:20px;font-weight:800;color:var(--green-dark)">Рандеман: ' +
+          Math.round((s.yieldOutputKg / (s.yieldInputKg || 1)) * 100) + '%</div>' +
+          '<button class="btn secondary mt" data-action="savecalc">Изчисли / Запази</button></div>'
+        : '<div class="card">' +
+          '<div class="kv"><span class="k">Вход — сухи с черупка</span><span class="v">' + s.yieldInputKg + ' кг</span></div>' +
+          '<div class="kv"><span class="k">Изход — чиста ядка</span><span class="v">' + s.yieldOutputKg + ' кг</span></div>' +
+          '<div class="center" style="font-size:20px;font-weight:800;color:var(--green-dark);margin-top:8px">Рандеман: ' +
+          Math.round((s.yieldOutputKg / (s.yieldInputKg || 1)) * 100) + '%</div></div>') +
       '</div></details>' +
 
       '<details class="sect"><summary>👥 Потребители и роли</summary><div class="sect-body">' +
@@ -1087,7 +1127,7 @@
       '<div class="field"><label>Телефон</label><input id="bPhone" class="input" value="' + esc(b.phone || '') + '"/></div>' +
       '<div class="field"><label>Бележка</label><textarea id="bNote" class="input">' + esc(b.note || '') + '</textarea></div>' +
       '<button class="btn" data-action="saveeditbuyer:' + id + '">💾 Запази</button>' +
-      '<button class="btn danger mt" data-action="delbuyer:' + id + '">🗑️ Изтрий купувача</button>' +
+      (isAdmin() ? '<button class="btn danger mt" data-action="delbuyer:' + id + '">🗑️ Изтрий купувача</button>' : '') +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
 
@@ -1286,13 +1326,14 @@
         break;
       }
       case 'restore': if (isAdmin()) { restore(parts[1]); render(); } break;
+      case 'react': toggleReaction(parts[1]); break;
 
       case 'newsale': sheetNewSale(); break;
       case 'newsalefor': sheetNewSale(parts[1]); break;
       case 'savesale': saveSale(); break;
       case 'newbuyer': sheetNewBuyer(); break;
       case 'savebuyer': saveBuyer(); break;
-      case 'editbuyer': if (isAdmin()) sheetEditBuyer(parts[1]); break;
+      case 'editbuyer': sheetEditBuyer(parts[1]); break;
       case 'saveeditbuyer': saveEditBuyer(parts[1]); break;
       case 'delbuyer': deleteBuyer(parts[1]); break;
       case 'buyer': go('buyer', parts[1]); break;
@@ -1562,17 +1603,40 @@
     input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
     input.onchange = function () {
       var f = input.files[0]; if (!f) return;
-      var reader = new FileReader();
-      reader.onload = function () {
-        var t = tree(id);
-        var photo = { id: DB.uid('ph'), data: reader.result, date: DB.todayISO() };
-        t.photos.push(photo);
-        addEvent({ type: 'photo', treeId: id, date: photo.date, note: 'добавена снимка' });
+      resizeImage(f, 1280, 0.72, function (dataUrl) {
+        var date = DB.todayISO();
+        if (!db.photos) db.photos = [];
+        db.photos.push({ id: DB.uid('ph'), treeId: id, data: dataUrl, date: date, createdBy: db.currentUserId });
+        addEvent({ type: 'photo', treeId: id, date: date, note: 'добавена снимка' });
         go('tree', id);
-      };
-      reader.readAsDataURL(f);
+      });
     };
     input.click();
+  }
+
+  // Смалява снимката (макс. страна maxPx, JPEG качество q) → по-малък файл,
+  // за да стои всяка снимка под лимита за облачен документ.
+  function resizeImage(file, maxPx, q, cb) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        var scale = Math.min(1, maxPx / Math.max(w, h));
+        var cw = Math.round(w * scale), ch = Math.round(h * scale);
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = cw; canvas.height = ch;
+          canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
+          cb(canvas.toDataURL('image/jpeg', q));
+        } catch (e) {
+          cb(reader.result); // при грешка — оригинала
+        }
+      };
+      img.onerror = function () { cb(reader.result); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   }
 
   function stepHarvest(key, delta) {
@@ -1681,6 +1745,7 @@
   }
 
   function saveBuckets() {
+    if (!isAdmin()) return;
     document.querySelectorAll('[data-bkg]').forEach(function (inp) {
       var p = inp.getAttribute('data-bkg').split(':');
       var b = bucket(p[1]); if (!b) return;
@@ -1693,6 +1758,7 @@
     save(); alert('Запазено!');
   }
   function saveCalc() {
+    if (!isAdmin()) return;
     db.settings.yieldInputKg = parseFloat(el('yin').value) || 0;
     db.settings.yieldOutputKg = parseFloat(el('yout').value) || 0;
     save(); render();
@@ -1711,7 +1777,6 @@
   }
 
   function saveEditBuyer(id) {
-    if (!isAdmin()) return;
     var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
     b.name = name; b.phone = el('bPhone').value; b.note = el('bNote').value;

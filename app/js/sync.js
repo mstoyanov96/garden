@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var COLLECTIONS = ['trees', 'events', 'buyers', 'sales', 'users'];
+  var COLLECTIONS = ['trees', 'events', 'buyers', 'sales', 'users', 'photos'];
   var CHUNK = 450; // Firestore batch лимит е 500
 
   var S = {
