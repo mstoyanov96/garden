@@ -1,0 +1,15 @@
+{
+  "name": "Орехова градина",
+  "short_name": "Орехи",
+  "description": "Проследяване на орехова градина — грижа, добив, продажби. Работи офлайн.",
+  "lang": "bg",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1f7a43",
+  "theme_color": "#2f9e52",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
