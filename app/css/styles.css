@@ -373,6 +373,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bars.cleanbars .b{background:linear-gradient(180deg,#8b63d6,#6a3fc0);}
 .bars.withval{margin-top:16px;}
 .bars .b .bval{position:absolute;top:-15px;left:-6px;right:-6px;text-align:center;font-size:10px;font-weight:800;color:var(--green-dark);white-space:nowrap;}
+.bars.manyvals{margin-top:30px;}
+.bars.manyvals .b .bval{top:auto;bottom:100%;left:50%;right:auto;transform:translateX(-50%) rotate(-90deg);transform-origin:bottom center;font-size:9px;margin-bottom:2px;}
 .bars .b[role=button]{cursor:pointer;}
 .bars .b[role=button]:active{filter:brightness(1.1);}
 .stagehead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px;}

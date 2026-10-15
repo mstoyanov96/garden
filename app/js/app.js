@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.39.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.40.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1082,14 +1082,15 @@
     var cleanTot = cleanVals.reduce(function (a, b) { return a + b; }, 0);
     var pctShelled = greenTot > 0 ? Math.round(shelledTot / greenTot * 100) : 0;
     var pctClean = shelledTot > 0 ? Math.round(cleanTot / shelledTot * 100) : 0;
-    var showBarVals = labels.length <= 9; // при месец (28–31 стълба) числата се застъпват — крием ги
+    var showBarVals = true;
+    var manyBars = labels.length > 9; // при месец (28–31 стълба) въртим числата вертикално да се берат
     // една стъпаловидна диаграма за даден етап
     function stageChart(emoji, title, cls, vals, total, pct, pctWord) {
       var mx = Math.max.apply(null, vals.concat([1]));
       return '<div class="section-title">' + emoji + ' ' + title + '</div>' +
         '<div class="card">' +
         '<div class="stagehead"><b>' + fmtKg(total) + ' кг</b>' + (pct !== null ? '<span class="stagepct">' + pct + '% от ' + pctWord + '</span>' : '') + '</div>' +
-        '<div class="bars ' + cls + (showBarVals ? ' withval' : '') + '">' +
+        '<div class="bars ' + cls + (showBarVals ? ' withval' : '') + (manyBars ? ' manyvals' : '') + '">' +
         vals.map(function (v, i) {
           var act = (barActions && barActions[i]) ? ' data-action="' + barActions[i] + '" role="button"' : '';
           var bval = (showBarVals && v > 0) ? '<span class="bval">' + fmtKg(v) + '</span>' : '';
