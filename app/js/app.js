@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.21.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.22.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -20,6 +20,7 @@
   var careTrees = [];       // избрани дървета (id) когато careScope === 'trees' (от картата)
   var mapSelect = false;    // режим на избор на няколко дървета върху картата
   var mapSelected = [];     // id на избраните дървета върху картата
+  var mapMode = 'health';   // 'health' | 'harvest' — по какво се оцветяват дърветата на картата
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
@@ -30,6 +31,8 @@
   function $(sel, root) { return (root || document).querySelector(sel); }
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  // пази само цифри и водещия „+“ за tel: връзка
+  function telHref(s) { s = String(s == null ? '' : s).replace(/[^\d+]/g, ''); return s.replace(/(?!^)\+/g, ''); }
   function save() { DB.save(db); if (window.Sync) window.Sync.push(); }
   function me() { return db.users.find(function (u) { return u.id === db.currentUserId; }) || null; }
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
@@ -108,6 +111,25 @@
 
   function healthLabel(h) { return h === 'green' ? 'Здраво' : h === 'yellow' ? 'Нужда от грижа' : 'Болно / изсъхнало'; }
 
+  // ---- Свежест на брането (кога дървото е брано за орехи) ----------------
+  function lastHarvestISO(treeId) {
+    var last = null;
+    db.events.forEach(function (e) {
+      if (e.deletedAt || e.type !== 'harvest_tree' || e.treeId !== treeId || !e.date) return;
+      if (!last || e.date > last) last = e.date;
+    });
+    return last;
+  }
+  function harvestedToday(treeId) { return lastHarvestISO(treeId) === DB.todayISO(); }
+  function harvestFreshness(treeId) {
+    var iso = lastHarvestISO(treeId);
+    if (!iso) return 'never';
+    var days = Math.floor((Date.now() - new Date(iso + 'T00:00:00').getTime()) / 86400000);
+    if (days <= 1) return 'today';   // днес или вчера
+    if (days <= 7) return 'week';    // тази седмица
+    return 'old';                    // отдавна
+  }
+
   // ---- GPS helpers -------------------------------------------------------
   function treeGPS(t) {
     // връща {lat, lng} или null (съвместимо със стария текстов формат)
@@ -126,10 +148,13 @@
   }
 
   // ---- Tree SVG ----------------------------------------------------------
-  function treeSVG(health) {
-    var c = health === 'green' ? ['#4bb869', '#2f9e52', '#1f7a43']
-      : health === 'yellow' ? ['#f6c65a', '#f3b53c', '#d9962a']
-        : ['#ec726b', '#e4584f', '#c23e36'];
+  var FRESH_COLORS = {
+    today: ['#4bb869', '#2f9e52', '#1f7a43'],
+    week: ['#f6c65a', '#f3b53c', '#d9962a'],
+    old: ['#c3ccc6', '#aab7af', '#8b9a90'],
+    never: ['#d9ded9', '#c3ccc6', '#a2b0a6']
+  };
+  function treeSVGColors(c) {
     return '<svg viewBox="0 0 64 64" width="100%" height="100%">' +
       '<rect x="29" y="42" width="6" height="16" rx="2" fill="#8a5a3b"/>' +
       '<circle cx="22" cy="30" r="14" fill="' + c[2] + '"/>' +
@@ -137,6 +162,12 @@
       '<circle cx="32" cy="20" r="15" fill="' + c[0] + '"/>' +
       '<circle cx="32" cy="30" r="13" fill="' + c[1] + '"/>' +
       '</svg>';
+  }
+  function treeSVG(health) {
+    var c = health === 'green' ? ['#4bb869', '#2f9e52', '#1f7a43']
+      : health === 'yellow' ? ['#f6c65a', '#f3b53c', '#d9962a']
+        : ['#ec726b', '#e4584f', '#c23e36'];
+    return treeSVGColors(c);
   }
 
   // ---- Event logging -----------------------------------------------------
@@ -398,6 +429,13 @@
     activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; })
       .forEach(function (e) { todayKg += eventKg(e); });
 
+    var fr = { fresh: 0, week: 0, old: 0 }, doneToday = 0;
+    db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) {
+      var f = harvestFreshness(t.id);
+      if (f === 'today') fr.fresh++; else if (f === 'week') fr.week++; else fr.old++;
+      if (harvestedToday(t.id)) doneToday++;
+    });
+
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row">' +
       '<div class="stat green"><b>' + fmtKg(bucketsEq(todayKg)) + '</b><small>кофи днес</small></div>' +
@@ -410,21 +448,29 @@
       '</span>' +
       (editMode ? '' : '<button class="btn sm secondary walkbtn" data-action="nav:walk">🧭 Къде съм</button>') +
       '</div>' +
+      (editMode ? '' : '<div class="seg"><button class="' + (mapMode === 'health' ? 'active' : '') + '" data-action="mapmode:health">🌳 Здраве</button>' +
+        '<button class="' + (mapMode === 'harvest' ? 'active' : '') + '" data-action="mapmode:harvest">🧺 Събиране</button></div>') +
       (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, или зона (Градина, Къща…) за да ѝ смениш мястото и размера.</div>' : '') +
       (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar"><option value="">Всички сортове</option>' +
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
-        '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' +
+        (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
         '</div>') +
       (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button></div>') +
       (editMode ? '' : '<div class="map-hint">💡 Натисни „Избери няколко" и докосвай дърветата, или задръж пръст върху дърво за да започнеш.</div>') +
-      '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode) + '</div>' +
-      '<div class="legend">' +
-      '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
-      '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
-      '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
-      '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span></div>' +
+      '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode, mapMode) + '</div>' +
+      (mapMode === 'harvest'
+        ? '<div class="legend">' +
+          '<span><i class="dotc green"></i>Брано скоро (' + fr.fresh + ')</span>' +
+          '<span><i class="dotc yellow"></i>Тази седмица (' + fr.week + ')</span>' +
+          '<span><i class="dotc" style="background:#aab7af"></i>Отдавна / не е брано (' + fr.old + ')</span>' +
+          '<span>✅ Събрано днес (' + doneToday + ')</span></div>'
+        : '<div class="legend">' +
+          '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
+          '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
+          '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
+          '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span></div>') +
 
       '<div class="section-title">Бързи действия</div>' +
       '<div class="row mb">' +
@@ -438,7 +484,7 @@
       '</div>';
   }
 
-  function orchardGrid(fVar, fHealth, edit) {
+  function orchardGrid(fVar, fHealth, edit, mode) {
     var order = DB.ROW_LETTERS;
     var trees = db.trees.filter(function (t) { return !t.deletedAt; });
     var rows = {};
@@ -501,8 +547,15 @@
           var small = v && v.size === 'small' ? ' small-badge' : '';
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
-          html += '<div class="tree-cell' + small + sel + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
-            '<div class="svgwrap">' + treeSVG(t.health) + '</div><span class="code">' + esc(t.code) + '</span></div>';
+          var svg, doneCls = '';
+          if (mode === 'harvest') {
+            svg = treeSVGColors(FRESH_COLORS[harvestFreshness(t.id)]);
+            if (harvestedToday(t.id)) doneCls = ' harvested-today';
+          } else {
+            svg = treeSVG(t.health);
+          }
+          html += '<div class="tree-cell' + small + sel + doneCls + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
+            '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span></div>';
         } else if (edit && !isReserved) {
           html += '<div class="cell-empty" data-action="addtree:' + rk + ':' + c + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2">＋</div>';
         }
@@ -658,10 +711,9 @@
         counterRow('ground', 'От земята', 'Зелени орехи', val);
     }
 
-    body += '<div class="card mt" style="display:flex;justify-content:space-between;align-items:center">' +
-      '<div><small class="muted">Днес събрано общо</small><div style="font-size:20px;font-weight:800">' +
-      fmtKg(todayKg) + ' кг · ' + fmtKg(bucketsEq(todayKg)) + ' кофи</div></div>' +
-      '<button class="btn sm" data-action="savehcurrent">Запази</button></div>';
+    body += '<div class="card mt">' +
+      '<small class="muted">Днес събрано общо</small><div style="font-size:20px;font-weight:800">' +
+      fmtKg(todayKg) + ' кг · ' + fmtKg(bucketsEq(todayKg)) + ' кофи</div></div>';
 
     body += '<button class="btn mt" data-action="savehcurrent">💾 Запази събраното</button>';
     body += '</div>';
@@ -900,6 +952,7 @@
       '<div class="avatar" style="width:52px;height:52px;font-size:19px">' + initials(b.name) + '</div>' +
       '<div style="flex:1"><b style="font-size:19px">' + esc(b.name) + '</b><div class="muted">' + esc(b.phone || '') + '</div></div>' +
       '<button class="btn sm secondary" data-action="editbuyer:' + b.id + '">✏️ Редактирай</button></div>' +
+      (b.phone ? '<a class="btn mt" href="tel:' + esc(telHref(b.phone)) + '" style="text-decoration:none">📞 Обади се на ' + esc(b.phone) + '</a>' : '') +
       (b.note ? '<p class="mt">' + esc(b.note) + '</p>' : '') + '</div>' +
       '<div class="section-title">История на покупки</div>' +
       '<div class="card">' + (purchases.length ? purchases.map(function (s) {
@@ -1368,6 +1421,7 @@
       case 'mapselecttoggle':
         if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
         render(); break;
+      case 'mapmode': mapMode = (parts[1] === 'harvest' ? 'harvest' : 'health'); render(); break;
       case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note, height: te.height } : null; sheetTreeEdit(parts[1]); break; }
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);

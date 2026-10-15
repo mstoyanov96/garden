@@ -29,6 +29,7 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;}
+html{overflow-x:hidden;}
 body{
   font-family:-apple-system,"Segoe UI",Roboto,system-ui,"Noto Sans",sans-serif;
   background:var(--bg);
@@ -36,6 +37,7 @@ body{
   font-size:17px;
   line-height:1.4;
   -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 
@@ -50,7 +52,7 @@ img{max-width:100%;display:block;}
 
 /* ---- App frame --------------------------------------------------------- */
 .app{
-  max-width:480px;margin:0 auto;min-height:100%;
+  max-width:480px;margin:0 auto;min-height:100%;width:100%;overflow-x:hidden;
   background:var(--bg);position:relative;
   display:flex;flex-direction:column;
   box-shadow:0 0 60px rgba(0,0,0,.06);
@@ -65,6 +67,10 @@ img{max-width:100%;display:block;}
   background:var(--card);
   display:flex;align-items:center;gap:12px;
   padding:14px 16px;border-bottom:1px solid var(--line);
+  /* да не се крие под „чеолката“/статус лентата на iPhone */
+  padding-top:calc(14px + env(safe-area-inset-top));
+  padding-left:calc(16px + env(safe-area-inset-left));
+  padding-right:calc(16px + env(safe-area-inset-right));
 }
 .topbar .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;}
 .topbar .brand .logo{width:34px;height:34px;}
@@ -80,7 +86,7 @@ img{max-width:100%;display:block;}
   color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px;}
 
 /* ---- Content ----------------------------------------------------------- */
-.content{padding:16px 16px 96px;}
+.content{padding:16px 16px calc(96px + env(safe-area-inset-bottom));padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right));}
 .h2{font-size:21px;font-weight:800;margin:4px 2px 14px;}
 .section-title{font-size:16px;font-weight:700;margin:20px 2px 10px;color:var(--ink);}
 .section-title.title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
@@ -222,6 +228,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 /* избрани дървета за групова грижа (торене/поливане) */
 .tree-cell.selected .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));background:var(--blue-soft);border-radius:50%;}
 .tree-cell.selected::after{content:'✓';position:absolute;top:-8px;right:4px;width:18px;height:18px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);border:2px solid #fff;}
+/* ✓ дървото е събирано днес (режим „Събиране“) */
+.tree-cell.harvested-today::after{content:'✓';position:absolute;top:-8px;right:4px;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);border:2px solid #fff;z-index:1;}
 .map-hint{font-size:12px;color:var(--muted);background:var(--green-soft);border-radius:10px;padding:8px 10px;margin:4px 0 10px;}
 .map-tools-row{margin:4px 0 8px;}
 .map-tools-row .btn{width:100%;}
@@ -229,7 +237,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .pickchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 
 /* плаваща лента за групово действие върху избрани дървета */
-.mapbar{position:fixed;left:12px;right:12px;bottom:84px;z-index:60;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.2);border:2px solid var(--green);padding:12px 14px;display:none;align-items:center;justify-content:space-between;gap:10px;}
+.mapbar{position:fixed;left:calc(12px + env(safe-area-inset-left));right:calc(12px + env(safe-area-inset-right));bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.2);border:2px solid var(--green);padding:12px 14px;display:none;align-items:center;justify-content:space-between;gap:10px;}
 .mapbar.open{display:flex;}
 .mapbar-info{font-size:14px;color:var(--green-dark);}
 .mapbar-info b{font-size:20px;}
@@ -340,7 +348,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
   max-width:480px;margin:0 auto;
   background:var(--card);border-top:1px solid var(--line);
   display:flex;justify-content:space-around;align-items:center;
-  height:72px;padding-bottom:env(safe-area-inset-bottom);
+  height:calc(72px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);
+  padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);
 }
 .bottomnav .nav{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);flex:1;height:100%;justify-content:center;}
 .bottomnav .nav .ic{font-size:23px;line-height:1;width:48px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:12px;transition:background .15s;}
@@ -348,10 +357,10 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bottomnav .nav.active .ic{background:var(--green-soft);transform:translateY(-1px);}
 
 /* ---- FAB --------------------------------------------------------------- */
-.fab{position:fixed;right:calc(50% - 240px + 18px);bottom:88px;z-index:55;width:60px;height:60px;border-radius:50%;
+.fab{position:fixed;right:calc(50% - 240px + 18px);bottom:calc(88px + env(safe-area-inset-bottom));z-index:55;width:60px;height:60px;border-radius:50%;
   background:var(--green);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-lg);}
-@media(max-width:480px){.fab{right:18px;}}
+@media(max-width:480px){.fab{right:calc(18px + env(safe-area-inset-right));}}
 
 /* ---- Modal / sheet ----------------------------------------------------- */
 .sheet-backdrop{position:fixed;inset:0;background:rgba(20,30,24,.45);z-index:100;display:none;align-items:flex-end;justify-content:center;}
@@ -363,7 +372,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 
 /* ---- Login ------------------------------------------------------------- */
 .login{min-height:100vh;display:flex;flex-direction:column;}
-.login .hero{height:230px;background:
+.login .hero{height:calc(230px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top);background:
   radial-gradient(120px 120px at 20% 30%, rgba(255,255,255,.12), transparent),
   radial-gradient(160px 160px at 80% 60%, rgba(255,255,255,.10), transparent),
   linear-gradient(135deg,#34a85a,#1f7a43);display:flex;align-items:flex-end;}
@@ -379,7 +388,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .offline-bar{display:none;align-items:center;justify-content:center;gap:8px;
   background:linear-gradient(180deg,#fde7c7,#fbdcb0);color:#8a5a12;
   border-bottom:1px solid #f0cf9b;text-align:center;font-size:13px;font-weight:700;
-  padding:9px 14px;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+  padding:9px 14px;padding-top:calc(9px + env(safe-area-inset-top));box-shadow:0 2px 8px rgba(0,0,0,.06);}
 body.offline .offline-bar{display:flex;animation:offslide .25s ease;}
 @keyframes offslide{from{opacity:0;transform:translateY(-100%);}to{opacity:1;transform:translateY(0);}}
 
@@ -388,7 +397,7 @@ body.offline .offline-bar{display:flex;animation:offslide .25s ease;}
   position:fixed;left:0;right:0;top:0;z-index:200;
   background:var(--green);color:#fff;font-weight:700;font-size:14px;
   display:flex;align-items:center;justify-content:center;gap:12px;
-  padding:10px 14px;box-shadow:0 4px 14px rgba(0,0,0,.18);
+  padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));box-shadow:0 4px 14px rgba(0,0,0,.18);
 }
 .update-bar button{background:#fff;color:var(--green-dark);font-weight:800;border-radius:10px;padding:8px 16px;font-size:14px;}
 .update-bar button:active{filter:brightness(.95);}
