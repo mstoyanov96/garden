@@ -34,7 +34,7 @@
       { id: 'z_g1', kind: 'garden', emoji: '🥬', label: 'Градина', r: 2, rs: 3, c: 8, cs: 6 },
       { id: 'z_house', kind: 'house', emoji: '🏠', label: 'Къща', r: 2, rs: 2, c: 14, cs: 6 },
       { id: 'z_g2', kind: 'garden', emoji: '🥬', label: 'Градина', r: 4, rs: 2, c: 14, cs: 6 },
-      { id: 'z_coop', kind: 'coop', emoji: '🐔', label: 'Кокошки', r: 6, rs: 1, c: 14, cs: 3 },
+      { id: 'z_coop', kind: 'coop', emoji: '🐔', label: 'Кошита', r: 6, rs: 1, c: 14, cs: 3 },
       { id: 'z_dog', kind: 'dog', emoji: '🐕', label: 'Джари', r: 6, rs: 1, c: 17, cs: 3 }
     ];
   }
@@ -137,6 +137,7 @@
     try { db = JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
     // миграции за стари инсталации (пазим съществуващите данни)
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
+    if (db.settings && db.settings.zones) { var cp = db.settings.zones.filter(function (z) { return z.kind === 'coop' && z.label === 'Кокошки'; }); if (cp.length) { cp.forEach(function (z) { z.label = 'Кошита'; }); save(db); } }
     if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
     if (!db.photos) { db.photos = []; save(db); }
     return db;
