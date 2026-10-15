@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.28.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.29.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -863,6 +863,8 @@
       mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
       photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
       tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
+      buyer_add: { ic: '🤝', cls: 'sys', t: 'Нов купувач' },
+      buyer_del: { ic: '🗑️', cls: 'sys', t: 'Изтрит купувач' },
       note: { ic: '📝', cls: 'sys', t: 'Бележка' }
     };
     var m = map[e.type] || { ic: '•', cls: 'sys', t: e.type };
@@ -984,6 +986,7 @@
           '<div class="meta">' + fmtDate(s.date) + '</div></div>';
       }).join('') : '<p class="muted">Още няма покупки.</p>') + '</div>' +
       '<button class="btn" data-action="newsalefor:' + b.id + '">➕ Добави продажба</button>' +
+      (isAdmin() ? '<button class="btn danger mt" data-action="delbuyer:' + b.id + '">🗑️ Изтрий купувача</button>' : '') +
       '</div>';
   }
 
@@ -2065,7 +2068,8 @@
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
     db.buyers.push({ id: DB.uid('buy'), name: name, phone: fmtPhone(el('bPhone').value), note: el('bNote').value, createdAt: Date.now() });
-    save(); closeSheet(); go('sales');
+    addEvent({ type: 'buyer_add', date: DB.todayISO(), note: name });
+    closeSheet(); go('sales');
   }
 
   function saveEditBuyer(id) {
@@ -2084,7 +2088,8 @@
     }
     if (!confirm('Да изтрия ли купувача „' + b.name + '"?')) return;
     db.buyers = db.buyers.filter(function (x) { return x.id !== id; });
-    save(); closeSheet(); go('sales');
+    addEvent({ type: 'buyer_del', date: DB.todayISO(), note: b.name });
+    closeSheet(); go('sales');
   }
 
   // ---- Offline indicator -------------------------------------------------
