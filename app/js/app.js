@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.24.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.25.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -990,8 +990,14 @@
 
       '<details class="sect"><summary>🌰 Сортове орехи</summary><div class="sect-body">' +
       '<div class="card">' + s.varieties.map(function (v) {
-        return '<div class="kv"><span class="k">' + (v.size === 'big' ? '🌰 Едри' : '🥜 Малки') + '</span><span class="v">' + esc(v.name) + ' — ' + esc(v.note) + '</span></div>';
+        if (!isAdmin()) {
+          return '<div class="kv"><span class="k">' + (v.size === 'big' ? '🌰 Едри' : '🥜 Малки') + '</span><span class="v">' + esc(v.name) + ' — ' + esc(v.note) + '</span></div>';
+        }
+        return '<div class="list-row"><div class="ic harvest">' + (v.size === 'big' ? '🌰' : '🥜') + '</div>' +
+          '<div class="tx"><b>' + esc(v.name) + '</b><small>' + (v.size === 'big' ? 'Едър сорт' : 'Дребен сорт') + (v.note ? ' · ' + esc(v.note) : '') + '</small></div>' +
+          '<button class="btn sm ghost" data-action="varedit:' + v.id + '">✏️</button></div>';
       }).join('') + '</div>' +
+      (isAdmin() ? '<button class="btn secondary mt" data-action="varnew">➕ Нов сорт</button>' : '') +
       '</div></details>' +
 
       '<details class="sect"><summary>🪣 Кофи и тегло</summary><div class="sect-body">' +
@@ -1225,6 +1231,54 @@
     s.classList.add('open');
   }
   function closeSheet() { el('sheet').classList.remove('open'); el('sheet').innerHTML = ''; }
+
+  // ---- Сортове (само админ; промените се синхронизират за всички) ----
+  function sheetVarietyNew() {
+    if (!isAdmin()) return;
+    openSheet('<h3>Нов сорт орех</h3>' +
+      '<div class="field"><label>Име</label><input id="vName" class="input" placeholder="напр. Чандлър"/></div>' +
+      '<div class="field"><label>Размер</label><select id="vSize" class="input"><option value="big">🌰 Едър сорт</option><option value="small">🥜 Дребен сорт</option></select></div>' +
+      '<div class="field"><label>Бележка</label><input id="vNote" class="input" placeholder="напр. Големи орехи"/></div>' +
+      '<button class="btn" data-action="savevariety:new">💾 Добави сорт</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+  function sheetVarietyEdit(id) {
+    if (!isAdmin()) return;
+    var v = variety(id); if (!v) return;
+    openSheet('<h3>Сорт: ' + esc(v.name) + '</h3>' +
+      '<div class="field"><label>Име</label><input id="vName" class="input" value="' + esc(v.name) + '"/></div>' +
+      '<div class="field"><label>Размер</label><select id="vSize" class="input">' +
+      '<option value="big"' + (v.size === 'big' ? ' selected' : '') + '>🌰 Едър сорт</option>' +
+      '<option value="small"' + (v.size === 'small' ? ' selected' : '') + '>🥜 Дребен сорт</option></select></div>' +
+      '<div class="field"><label>Бележка</label><input id="vNote" class="input" value="' + esc(v.note || '') + '"/></div>' +
+      '<button class="btn" data-action="savevariety:' + v.id + '">💾 Запази</button>' +
+      '<button class="btn danger mt" data-action="delvariety:' + v.id + '">🗑️ Изтрий сорта</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+  function saveVariety(id) {
+    if (!isAdmin()) return;
+    var name = (el('vName').value || '').trim();
+    if (!name) { alert('Въведи име на сорта.'); return; }
+    var size = el('vSize').value === 'small' ? 'small' : 'big';
+    var note = (el('vNote').value || '').trim();
+    if (id === 'new') {
+      db.settings.varieties.push({ id: DB.uid('var'), name: name, size: size, note: note });
+    } else {
+      var v = variety(id); if (!v) return;
+      v.name = name; v.size = size; v.note = note;
+    }
+    save(); closeSheet(); render();
+  }
+  function deleteVariety(id) {
+    if (!isAdmin()) return;
+    var v = variety(id); if (!v) return;
+    var used = db.trees.filter(function (t) { return !t.deletedAt && t.varietyId === id; }).length;
+    if (used) { alert('Този сорт се ползва от ' + used + ' дърво(а). Първо смени сорта им, после го изтрий.'); return; }
+    if (db.settings.varieties.length <= 1) { alert('Трябва да има поне един сорт.'); return; }
+    if (!confirm('Да изтрия ли сорт „' + v.name + '“?')) return;
+    db.settings.varieties = db.settings.varieties.filter(function (x) { return x.id !== id; });
+    save(); closeSheet(); render();
+  }
 
   function sheetTreeEdit(id) {
     var t = tree(id);
@@ -1510,6 +1564,11 @@
 
       case 'savebuckets': saveBuckets(); break;
       case 'savecalc': saveCalc(); break;
+
+      case 'varnew': sheetVarietyNew(); break;
+      case 'varedit': sheetVarietyEdit(parts[1]); break;
+      case 'savevariety': saveVariety(parts[1]); break;
+      case 'delvariety': deleteVariety(parts[1]); break;
 
       case 'promote': sheetPromote(parts[1]); break;
       case 'dopromote': doPromote(parts[1]); break;
