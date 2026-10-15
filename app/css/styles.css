@@ -39,7 +39,7 @@ body{
   -webkit-font-smoothing:antialiased;
   overflow-x:hidden;
 }
-button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;touch-action:manipulation;}
 
 /* Снимка на цял екран със зуум с два пръста */
 #lightbox{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;overflow:hidden;}
@@ -47,7 +47,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 #lightbox .lb-img{max-width:100%;max-height:100%;touch-action:none;transform-origin:center center;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
 #lightbox .lb-close{position:absolute;top:max(12px,env(safe-area-inset-top));right:16px;z-index:2;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.92);font-size:22px;font-weight:800;color:#333;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.4);}
 #lightbox .lb-hint{position:absolute;bottom:max(18px,env(safe-area-inset-bottom));left:12px;right:12px;text-align:center;color:#fff;font-size:12px;opacity:.82;pointer-events:none;}
-input,select,textarea{font-family:inherit;font-size:17px;}
+input,select,textarea{font-family:inherit;font-size:17px;touch-action:manipulation;}
 img{max-width:100%;display:block;}
 
 /* ---- App frame --------------------------------------------------------- */
@@ -324,7 +324,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .stepper{display:flex;align-items:center;gap:8px;}
 .stepper button{width:40px;height:40px;border-radius:12px;background:#eef1ee;font-size:22px;font-weight:700;color:var(--green-dark);}
 .stepper button:active{background:var(--green-soft);}
-.stepper .val{min-width:34px;text-align:center;font-size:19px;font-weight:800;}
+.stepper .val{width:56px;min-width:56px;height:40px;text-align:center;font-size:19px;font-weight:800;color:var(--ink);background:#fff;border:2px solid var(--line);border-radius:10px;padding:0 4px;}
+.stepper input.val:focus{border-color:var(--green);outline:none;}
 
 /* ---- Fill stepper (−5% / % / +5%) ------------------------------------ */
 .fillstep{display:flex;align-items:center;gap:10px;margin-top:10px;}
