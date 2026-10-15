@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.38.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.39.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1023,7 +1023,8 @@
     var MONTHS_BG = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
     var sy = shellYield();
     function weekStart(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
-    var greenVals = [], cleanVals = [], labels = [], periodTitle = '';
+    function isoLocal(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+    var greenVals = [], cleanVals = [], labels = [], periodTitle = '', barActions = null;
     if (statsMode === 'month') {
       var ref = statsRef || new Date();
       var my = ref.getFullYear(), mm = ref.getMonth();
@@ -1047,7 +1048,21 @@
         for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); break; } }
       });
       labels = weeks.map(function (s) { return s.getDate() + '.' + (s.getMonth() + 1); });
+      barActions = weeks.map(function (s) { return 'statsweek:' + isoLocal(s); }); // натисни седмица → нейните дни
       periodTitle = labels[0] + ' – ' + weeks[7].getDate() + '.' + (weeks[7].getMonth() + 1);
+    } else if (statsMode === 'oneweek') {
+      var wkRef = statsRef || new Date();
+      var mon = weekStart(wkRef);
+      var dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+      var days7 = [];
+      for (var i = 0; i < 7; i++) { var dd = new Date(mon); dd.setDate(dd.getDate() + i); days7.push(dd); }
+      greenVals = new Array(7).fill(0); cleanVals = new Array(7).fill(0);
+      activeEvents().forEach(function (e) {
+        var d = new Date(e.date + 'T00:00:00');
+        for (var j = 0; j < 7; j++) { if (d.getFullYear() === days7[j].getFullYear() && d.getMonth() === days7[j].getMonth() && d.getDate() === days7[j].getDate()) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); break; } }
+      });
+      labels = days7.map(function (d, i) { return dayNames[i] + ' ' + d.getDate(); });
+      periodTitle = 'Седмица ' + days7[0].getDate() + '.' + (days7[0].getMonth() + 1) + ' – ' + days7[6].getDate() + '.' + (days7[6].getMonth() + 1);
     } else {
       var seasonMonths = [7, 8, 9, 10, 11];
       labels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
@@ -1067,14 +1082,19 @@
     var cleanTot = cleanVals.reduce(function (a, b) { return a + b; }, 0);
     var pctShelled = greenTot > 0 ? Math.round(shelledTot / greenTot * 100) : 0;
     var pctClean = shelledTot > 0 ? Math.round(cleanTot / shelledTot * 100) : 0;
+    var showBarVals = labels.length <= 9; // при месец (28–31 стълба) числата се застъпват — крием ги
     // една стъпаловидна диаграма за даден етап
     function stageChart(emoji, title, cls, vals, total, pct, pctWord) {
       var mx = Math.max.apply(null, vals.concat([1]));
       return '<div class="section-title">' + emoji + ' ' + title + '</div>' +
         '<div class="card">' +
         '<div class="stagehead"><b>' + fmtKg(total) + ' кг</b>' + (pct !== null ? '<span class="stagepct">' + pct + '% от ' + pctWord + '</span>' : '') + '</div>' +
-        '<div class="bars ' + cls + '">' +
-        vals.map(function (v) { return '<div class="b" style="height:' + Math.max(4, (v / mx) * 100) + '%"></div>'; }).join('') +
+        '<div class="bars ' + cls + (showBarVals ? ' withval' : '') + '">' +
+        vals.map(function (v, i) {
+          var act = (barActions && barActions[i]) ? ' data-action="' + barActions[i] + '" role="button"' : '';
+          var bval = (showBarVals && v > 0) ? '<span class="bval">' + fmtKg(v) + '</span>' : '';
+          return '<div class="b"' + act + ' style="height:' + Math.max(4, (v / mx) * 100) + '%">' + bval + '</div>';
+        }).join('') +
         '</div><div class="barlabels">' + labels.map(function (l) { return '<span>' + l + '</span>'; }).join('') + '</div>' +
         '</div>';
     }
@@ -1106,10 +1126,12 @@
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
       '<div class="seg"><button class="' + (statsMode === 'season' ? 'active' : '') + '" data-action="statsmode:season">📆 Сезон</button>' +
       '<button class="' + (statsMode === 'month' ? 'active' : '') + '" data-action="statsmode:month">📅 Месец</button>' +
-      '<button class="' + (statsMode === 'weeks' ? 'active' : '') + '" data-action="statsmode:weeks">🗓️ Седмици</button></div>' +
+      '<button class="' + (statsMode === 'weeks' || statsMode === 'oneweek' ? 'active' : '') + '" data-action="statsmode:weeks">🗓️ Седмици</button></div>' +
       (statsMode !== 'season'
         ? '<div class="stat-period"><span class="ar" data-action="statsprev">‹</span><span class="pl">' + periodTitle + '</span><span class="ar" data-action="statsnext">›</span></div>'
         : '<div class="stat-period" style="cursor:default"><span class="pl">' + periodTitle + '</span></div>') +
+      (statsMode === 'weeks' ? '<p class="muted center" style="font-size:12px;margin:-4px 0 12px">👆 Натисни дадена седмица, за да видиш дните ѝ.</p>' : '') +
+      (statsMode === 'oneweek' ? '<div class="center" style="margin:-4px 0 12px"><button class="btn sm ghost" data-action="statsmode:weeks">‹ Всички седмици</button></div>' : '') +
       stageChart('🟢', 'Зелени (кг)', 'greenbars', greenVals, greenTot, null, '') +
       stageChart('🥥', 'Обелени (кг)', 'shelledbars', shelledVals, shelledTot, pctShelled, 'зелените') +
       stageChart('🌰', 'Изчистени (кг)', 'cleanbars', cleanVals, cleanTot, pctClean, 'обелените') +
@@ -1768,10 +1790,16 @@
         else if (statsMode === 'weeks') statsRef = new Date();
         else statsRef = null;
         render(); break;
+      case 'statsweek': {
+        var ws = new Date(parts.slice(1).join(':') + 'T00:00:00'); // parts[1] е ISO дата (yyyy-mm-dd)
+        if (!isNaN(ws)) { statsRef = ws; statsMode = 'oneweek'; }
+        render(); break;
+      }
       case 'statsprev': case 'statsnext': {
         var dir = parts[0] === 'statsnext' ? 1 : -1;
         if (statsMode === 'month') { var r = statsRef || new Date(); statsRef = new Date(r.getFullYear(), r.getMonth() + dir, 1); }
         else if (statsMode === 'weeks') { var w = statsRef || new Date(); var n = new Date(w); n.setDate(n.getDate() + dir * 7 * 8); statsRef = n; }
+        else if (statsMode === 'oneweek') { var w1 = statsRef || new Date(); var n1 = new Date(w1); n1.setDate(n1.getDate() + dir * 7); statsRef = n1; }
         render(); break;
       }
       case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note, height: te.height } : null; sheetTreeEdit(parts[1]); break; }
