@@ -157,10 +157,10 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bucketpick .bpick.active{border-color:var(--green);background:var(--green-soft);}
 
 /* ---- Stat cards -------------------------------------------------------- */
-.stat-row{display:flex;gap:12px;margin-bottom:14px;}
-.stat{flex:1;border-radius:var(--radius);padding:16px;color:#fff;box-shadow:var(--shadow);}
-.stat b{display:block;font-size:26px;line-height:1.1;}
-.stat small{font-size:12px;opacity:.9;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.stat-row{display:flex;gap:10px;margin-bottom:14px;}
+.stat{flex:1;border-radius:var(--radius);padding:18px 12px;color:#fff;box-shadow:var(--shadow);min-height:92px;display:flex;flex-direction:column;justify-content:center;}
+.stat b{display:block;font-size:32px;line-height:1.05;}
+.stat small{font-size:12.5px;opacity:.95;display:block;margin-top:3px;line-height:1.15;}
 .stat.green{background:linear-gradient(135deg,#34a85a,#1f7a43);}
 .stat.blue{background:linear-gradient(135deg,#3a90e6,#2563c9);}
 .stat.purple{background:linear-gradient(135deg,#8b63d6,#6a3fc0);}
