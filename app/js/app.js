@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.35.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.36.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -549,12 +549,13 @@
 
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row" id="statSwipe">' +
-      '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(greenBk) + '</b><small>🟢 кофи зелени ' + perLbl + ' · ≈ ' + fmtKg(hv.kg) + ' кг</small></div>' +
-      '<div class="stat shelled harvstat" data-action="statbreak"><b>' + fmtKg(shelledBk) + '</b><small>🥥 кофи обелени ' + perLbl + (sh.manual ? ' · ✏️ ръчно' : '') + ' · ≈ ' + fmtKg(shelledKg) + ' кг</small></div>' +
+      '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(greenBk) + '</b><small>кофи зелени ' + perLbl + '</small><small class="kg">≈ ' + fmtKg(hv.kg) + ' кг</small></div>' +
+      '<div class="stat shelled harvstat" data-action="statbreak"><b>' + fmtKg(shelledBk) + '</b><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг</small></div>' +
       '</div>' +
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
       (statPeriod === 'today' ? '📅 Днес' : '🗓️ Тази седмица (7 дни)') +
       '</span><span class="ar">›</span></div>' +
+      '<div class="refbucket-note"><img src="assets/bucket_cheese.png" alt="Кофа от сирене"/><span>броят кофи е спрямо кофата от сирене (' + fmtKg(refBucketKg()) + ' кг)</span></div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + (statPeriod === 'today' ? 'днес' : 'тази седмица') +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
 
