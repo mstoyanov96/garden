@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.40.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.41.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -30,6 +30,7 @@
   var harvestHL = null;     // null или { id: kg } — подчертани дървета на картата (кой колко е дал)
   var statSuppressClick = false; // пропусни клика след суайп по бройките
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
+  var pendingBucketVals = null; // временно новите тегла на кофите, докато админът избере дали да преизчисли старите записи
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
@@ -283,6 +284,7 @@
   function stateKg(b, state) { return !b ? 0 : (state === 'clean' ? b.cleanKg : state === 'shelled' ? b.shelledKg : b.greenKg); }
   function stateLabel(state) { return state === 'clean' ? 'чиста ядка' : state === 'shelled' ? 'обелени (с черупка)' : 'зелени'; }
   function eventKg(ev) {
+    if (ev.lockKg != null) return ev.lockKg; // замразено тегло — не се преизчислява при промяна на кофите
     if (!ev.buckets) return 0;
     var fill = (ev.fill != null ? ev.fill : 100) / 100; // колко пълни са били кофите
     var total = 0;
@@ -1213,7 +1215,8 @@
       '</div></details>' +
 
       '<details class="sect"><summary>🪣 Кофи и тегло</summary><div class="sect-body">' +
-      '<p class="muted mb" style="font-size:13px">Колко кг е 1 кофа — зелени / обелени с черупка / чиста ядка. (Обелените с черупка са винаги в кофата от сирене.)</p>' +
+      '<p class="muted mb" style="font-size:13px">Колко кг е 1 кофа — зелени / обелени с черупка / чиста ядка. (Обелените с черупка са винаги в кофата от сирене.)' +
+      (isAdmin() ? '<br>При промяна на теглото ще те питам дали да преизчисля и старите записи, или да важи само от определена дата.' : '') + '</p>' +
       db.settings.buckets.map(function (b) {
         var head = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
           '<div style="width:48px;height:48px;border-radius:12px;background:var(--green-soft);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;padding:4px">' + bucketIcon(b) + '</div>' +
@@ -1877,6 +1880,8 @@
       case 'buyer': go('buyer', parts[1]); break;
 
       case 'savebuckets': saveBuckets(); break;
+      case 'bucketsapply': applyBuckets(parts[1], parts[1] === 'from' ? (el('bkFromDate') && el('bkFromDate').value) : null); break;
+      case 'bucketscancel': pendingBucketVals = null; closeSheet(); break;
       case 'savecalc': saveCalc(); break;
       case 'saveshellyield': saveShellYield(); break;
       case 'saveshelled': saveShelledToday(); break;
@@ -2347,16 +2352,54 @@
 
   function saveBuckets() {
     if (!isAdmin()) return;
+    var vals = {}; // bid -> { green, shelled, clean, liters }
+    var weightChanged = false;
     document.querySelectorAll('[data-bkg]').forEach(function (inp) {
       var p = inp.getAttribute('data-bkg').split(':');
-      var b = bucket(p[1]); if (!b) return;
+      var field = p[0], bid = p[1];
+      var b = bucket(bid); if (!b) return;
       var val = parseFloat(inp.value) || 0;
-      if (p[0] === 'green') b.greenKg = val;
-      else if (p[0] === 'shelled') b.shelledKg = val;
-      else if (p[0] === 'clean') b.cleanKg = val;
-      else if (p[0] === 'liters') { b.liters = val; b.capacityNote = '≈ ' + val + ' л'; }
+      vals[bid] = vals[bid] || {};
+      vals[bid][field] = val;
+      var cur = field === 'green' ? b.greenKg : field === 'shelled' ? b.shelledKg : field === 'clean' ? b.cleanKg : b.liters;
+      if (field !== 'liters' && val !== (cur || 0)) weightChanged = true;
     });
-    save(); alert('Запазено!');
+    if (!weightChanged) { applyBucketVals(vals); save(); alert('Запазено!'); return; }
+    // теглото се е сменило → питаме какво да правим със старите записи (кг се смятат по тегло на кофата)
+    pendingBucketVals = vals;
+    var n = db.events.filter(function (e) { return !e.deletedAt && (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.lockKg == null; }).length;
+    openSheet('<h3>Ново тегло на кофите</h3>' +
+      '<p class="muted" style="font-size:14px">Килограмите на записите се смятат по теглото на кофата. Какво да стане със старите записи (' + n + ')?</p>' +
+      '<button class="btn" data-action="bucketsapply:all">🔄 Обнови всички записи с новото тегло</button>' +
+      '<div class="muted center" style="margin:14px 0 6px;font-size:13px">— или —</div>' +
+      '<div class="field"><label>Новото тегло да важи само от дата:</label><input id="bkFromDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
+      '<button class="btn secondary" data-action="bucketsapply:from">📅 Запази старите, важи от датата</button>' +
+      '<button class="btn ghost mt" data-action="bucketscancel">Отказ</button>');
+  }
+  function applyBucketVals(vals) {
+    Object.keys(vals).forEach(function (bid) {
+      var b = bucket(bid); if (!b) return;
+      var v = vals[bid];
+      if (v.green != null) b.greenKg = v.green;
+      if (v.shelled != null) b.shelledKg = v.shelled;
+      if (v.clean != null) b.cleanKg = v.clean;
+      if (v.liters != null) { b.liters = v.liters; b.capacityNote = '≈ ' + v.liters + ' л'; }
+    });
+  }
+  // прилага новите тегла: mode 'all' = и за старите; dateFrom = замрази записите преди датата със старото тегло
+  function applyBuckets(mode, dateFrom) {
+    if (!pendingBucketVals) { closeSheet(); return; }
+    if (mode === 'from' && dateFrom) {
+      db.events.forEach(function (e) {
+        if (e.deletedAt) return;
+        if ((e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.lockKg == null && e.date < dateFrom) {
+          e.lockKg = eventKg(e); // замразяваме при текущите (старите) тегла
+        }
+      });
+    }
+    applyBucketVals(pendingBucketVals);
+    pendingBucketVals = null;
+    save(); closeSheet(); render(); alert('Запазено!');
   }
   function saveCalc() {
     if (!isAdmin()) return;
@@ -2368,6 +2411,7 @@
     if (!isAdmin()) return;
     var v = parseFloat(el('shYield').value);
     if (!(v > 0)) { alert('Въведи число по-голямо от 0.'); return; }
+    if (v !== shellYield() && !confirm('Новият процент важи за всички изчисления, включително старите дни. Да запазя ли?')) return;
     db.settings.shellYield = v; save(); alert('Запазено!'); render();
   }
   // ръчно въвеждане на реално обелените кофи за днес (надделява над авто-сметката)
