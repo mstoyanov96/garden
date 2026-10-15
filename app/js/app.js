@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.26.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.27.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1077,7 +1077,6 @@
       '</div></details>' +
 
       '<button class="btn ghost mt" data-action="logout">🚪 Смени потребител</button>' +
-      (isAdmin() ? '<button class="btn ghost mt" data-action="reset" style="border-color:#f3c9c6;color:#b23a33">🗑️ Нулирай всички данни</button>' : '') +
       '<p class="center muted mt">По-добра грижа = по-голям добив 🌰</p>' +
       '</div>';
   }
@@ -1478,7 +1477,6 @@
       case 'register': doRegister(); break;
       case 'logout': db.currentUserId = null; save(); render(); break;
       case 'settings': go('settings'); break;
-      case 'reset': if (isAdmin() && confirm('Да нулирам ли ВСИЧКИ данни? Това не може да се върне.')) { db = DB.reset(); editMode = false; go('login'); } break;
 
       case 'tree':
         if (mapSelect) { toggleMapTree(parts[1]); break; } // в режим избор докосването маркира/размаркирва
