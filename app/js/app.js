@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.43.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.44.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -460,14 +460,25 @@
     var dot = syncStatus === 'on' ? '🟢' : syncStatus === 'connecting' ? '🟡' : syncStatus === 'error' ? '🔴' : '⚪';
     return dot + ' Облачна синхронизация: <b>' + syncStatusText() + '</b>';
   }
+  // Облакът може да пази старото име на кокошарника → нормализираме към новото.
+  function normalizeZones() {
+    if (!db.settings || !db.settings.zones) return false;
+    var changed = false;
+    db.settings.zones.forEach(function (z) {
+      if (z.kind === 'coop' && z.label === 'Кокошки') { z.label = 'Кошита'; changed = true; }
+    });
+    return changed;
+  }
   // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
   function applyCloudSnapshot(cloud) {
     var keepUser = db.currentUserId;
     ['trees', 'events', 'buyers', 'sales', 'users', 'photos'].forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
     if (cloud.settings) db.settings = cloud.settings;
     db.currentUserId = keepUser;
+    var fixed = normalizeZones();
     DB.migratePhotos(db);
     DB.save(db);
+    if (fixed && window.Sync) window.Sync.push();
     render();
   }
   function startSync() {
@@ -475,7 +486,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { DB.migratePhotos(db); DB.save(db); if (!isSheetOpen()) render(); },
+      onRemote: function () { var fixed = normalizeZones(); DB.migratePhotos(db); DB.save(db); if (fixed && window.Sync) window.Sync.push(); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
