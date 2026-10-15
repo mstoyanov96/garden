@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.36.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.37.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1014,11 +1014,35 @@
     var soldKg = db.sales.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
     var revenue = db.sales.reduce(function (s, x) { return s + (x.total || 0); }, 0);
 
-    // по месеци
-    var months = new Array(12).fill(0);
-    harv.forEach(function (e) { var d = new Date(e.date); if (d.getFullYear() === year) months[d.getMonth()] += eventKg(e); });
-    var maxM = Math.max.apply(null, months.concat([1]));
-    var mLabels = ['Я', 'Ф', 'М', 'А', 'М', 'Ю', 'Ю', 'А', 'С', 'О', 'Н', 'Д'];
+    // добив по етапи за сезона (орехите узряват основно Авг–Дек)
+    var seasonMonths = [7, 8, 9, 10, 11];
+    var seasonLabels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+    var greenMon = new Array(12).fill(0), cleanMon = new Array(12).fill(0);
+    activeEvents().forEach(function (e) {
+      var d = new Date(e.date); if (d.getFullYear() !== year) return;
+      if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenMon[d.getMonth()] += eventKg(e);
+      else if (e.type === 'clean') cleanMon[d.getMonth()] += (e.kg || 0);
+    });
+    var sy = shellYield();
+    var greenVals = seasonMonths.map(function (m) { return greenMon[m]; });
+    var shelledVals = greenVals.map(function (v) { return v * sy; });
+    var cleanVals = seasonMonths.map(function (m) { return cleanMon[m]; });
+    var greenYear = greenMon.reduce(function (a, b) { return a + b; }, 0);
+    var shelledYear = greenYear * sy;
+    var cleanYear = cleanMon.reduce(function (a, b) { return a + b; }, 0);
+    var pctShelled = greenYear > 0 ? Math.round(shelledYear / greenYear * 100) : 0;
+    var pctClean = shelledYear > 0 ? Math.round(cleanYear / shelledYear * 100) : 0;
+    // една стъпаловидна диаграма за даден етап
+    function stageChart(emoji, title, cls, vals, total, pct, pctWord) {
+      var mx = Math.max.apply(null, vals.concat([1]));
+      return '<div class="section-title">' + emoji + ' ' + title + '</div>' +
+        '<div class="card">' +
+        '<div class="stagehead"><b>' + fmtKg(total) + ' кг</b>' + (pct !== null ? '<span class="stagepct">' + pct + '% от ' + pctWord + '</span>' : '') + '</div>' +
+        '<div class="bars ' + cls + '">' +
+        vals.map(function (v) { return '<div class="b" style="height:' + Math.max(4, (v / mx) * 100) + '%"></div>'; }).join('') +
+        '</div><div class="barlabels">' + seasonLabels.map(function (l) { return '<span>' + l + '</span>'; }).join('') + '</div>' +
+        '</div>';
+    }
 
     // топ дървета
     var perTree = {};
@@ -1044,10 +1068,10 @@
       '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
-      '<div class="section-title">Добив по месеци — ' + year + ' (кг)</div>' +
-      '<div class="card"><div class="bars">' +
-      months.map(function (v) { return '<div class="b" style="height:' + Math.max(4, (v / maxM) * 100) + '%"></div>'; }).join('') +
-      '</div><div class="barlabels">' + mLabels.map(function (l) { return '<span>' + l + '</span>'; }).join('') + '</div></div>' +
+      '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи за сезон ' + year + ' (Авг–Дек). Всеки етап показва общото и колко процент е от предишния.</p>' +
+      stageChart('🟢', 'Зелени (кг)', 'greenbars', greenVals, greenYear, null, '') +
+      stageChart('🥥', 'Обелени (кг)', 'shelledbars', shelledVals, shelledYear, pctShelled, 'зелените') +
+      stageChart('🌰', 'Изчистени (кг)', 'cleanbars', cleanVals, cleanYear, pctClean, 'обелените') +
 
       '<div class="section-title">Най-доходоносни дървета</div>' +
       '<div class="card">' + (ranked.length ? ranked.map(function (r) {
