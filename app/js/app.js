@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.41.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.42.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -298,6 +298,14 @@
   function eventBuckets(ev) {
     if (!ev.buckets) return 0;
     return Object.keys(ev.buckets).reduce(function (s, k) { return s + (ev.buckets[k] || 0); }, 0);
+  }
+  // „2 × Черна кофа“ (или няколко вида, събрани с +) за показване в дневника
+  function eventBucketNames(ev) {
+    if (!ev.buckets) return '';
+    return Object.keys(ev.buckets).filter(function (bid) { return ev.buckets[bid]; }).map(function (bid) {
+      var b = bucket(bid);
+      return fmtKg(ev.buckets[bid]) + ' × ' + (b ? b.name : 'кофа');
+    }).join(' + ');
   }
   // показва килограми с до 3 десетични знака, без излишни нули (напр. 3.75, 10, 0.5)
   function fmtKg(n) {
@@ -973,7 +981,7 @@
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
-    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBucketNames(e) + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
     else if (e.type === 'shell') detail = fmtKg(e.buckets) + ' обелени кофи · ≈ ' + fmtKg((e.buckets || 0) * refBucketKg()) + ' кг';
     else if (e.type === 'clean') detail = fmtKg(e.kg) + ' кг чиста ядка';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
