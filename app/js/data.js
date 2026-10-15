@@ -112,6 +112,7 @@
         buckets: buckets,
         yieldInputKg: 10,     // вход за рандеман (сухи с черупка)
         yieldOutputKg: 4.8,   // изход (чиста ядка)
+        shellYield: 0.5,      // колко обелени кофи излизат от 1 зелена кофа
         zones: defaultZones()
       },
       users: users,
@@ -136,6 +137,7 @@
     try { db = JSON.parse(raw); } catch (e) { var f = seed(); save(f); return f; }
     // миграции за стари инсталации (пазим съществуващите данни)
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
+    if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
     if (!db.photos) { db.photos = []; save(db); }
     return db;
   }

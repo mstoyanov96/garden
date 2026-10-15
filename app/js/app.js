@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.31.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.32.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -301,10 +301,15 @@
     return n.toFixed(3).replace(/\.?0+$/, '');
   }
   // еталонна кофа за броене („кофа за сирене“) — спрямо нея се смятат „кофи днес“
+  function refBucket() { return bucket('buc_cheese') || (db.settings.buckets && db.settings.buckets[0]); }
   function refBucketKg() {
-    var b = bucket('buc_cheese') || (db.settings.buckets && db.settings.buckets[0]);
+    var b = refBucket();
     return b && b.greenKg ? b.greenKg : 10;
   }
+  // тегло на 1 обелена (с черупка) еталонна кофа
+  function refShelledKg() { var b = refBucket(); return b && b.shelledKg ? b.shelledKg : refBucketKg(); }
+  // колко обелени кофи излизат от 1 зелена кофа (нагласва се в Настройки)
+  function shellYield() { var y = db.settings ? db.settings.shellYield : null; return (y != null && y > 0) ? y : 0.5; }
   // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
   function bucketsEq(kg) { return (kg || 0) / refBucketKg(); }
 
@@ -479,11 +484,14 @@
       if (harvestedToday(t.id)) doneToday++;
     });
 
+    var greenBk = bucketsEq(hv.kg);
+    var shelledBk = greenBk * shellYield();
+    var shelledKg = shelledBk * refShelledKg();
+
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row" id="statSwipe">' +
-      '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(bucketsEq(hv.kg)) + '</b><small>кофи ' + perLbl + '</small></div>' +
-      '<div class="stat blue harvstat" data-action="statbreak"><b>' + fmtKg(hv.kg) + '</b><small>кг зелени ' + perLbl + '</small></div>' +
-      '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
+      '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(greenBk) + '</b><small>🟢 кофи зелени ' + perLbl + ' · ≈ ' + fmtKg(hv.kg) + ' кг</small></div>' +
+      '<div class="stat shelled harvstat" data-action="statbreak"><b>' + fmtKg(shelledBk) + '</b><small>🥥 кофи обелени ' + perLbl + ' · ≈ ' + fmtKg(shelledKg) + ' кг</small></div>' +
       '</div>' +
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
       (statPeriod === 'today' ? '📅 Днес' : '🗓️ Тази седмица (7 дни)') +
@@ -710,7 +718,6 @@
           '<span class="bpic">' + bucketIcon(bk) + '</span>' +
           '<b>' + esc(bk.name) + '</b><small>1 кофа ≈ ' + fmtKg(stateKg(bk, harvestState)) + ' кг</small></button>';
       }).join('') + '</div></div>' +
-      stateChips() +
       counterRow(id, 'Колко кофи', b ? b.name : '', val) +
       fillChips() +
       '<div class="field"><label>Дата</label><input id="thdate" type="date" class="input" value="' + today + '"/></div>' +
@@ -741,7 +748,6 @@
           '<span class="bpic">' + bucketIcon(b) + '</span>' +
           '<b>' + esc(b.name) + '</b><small>1 кофа ≈ ' + fmtKg(stateKg(b, harvestState)) + ' кг</small></button>';
       }).join('') + '</div></div>';
-    body += stateChips();
     body += '<div class="field"><label>Дата</label><input id="hdate" type="date" class="input" value="' + today + '"/></div>';
     body += fillChips();
 
@@ -784,15 +790,6 @@
       '<span class="val" id="cnt_' + key + '">' + val + '</span>' +
       '<button data-action="hplus:' + key + '">+</button>' +
       '</div></div>';
-  }
-
-  // чипове за вида на кофите: зелени / обелени с черупка / чиста ядка
-  function stateChips() {
-    var opts = [['green', '🟢 Зелени'], ['shelled', '🥥 Обелени (с черупка)'], ['clean', '🌰 Чиста ядка']];
-    return '<div class="field"><label>В какъв вид са кофите?</label><div class="rowfilter">' +
-      opts.map(function (o) {
-        return '<button class="' + (harvestState === o[0] ? 'active' : '') + '" data-action="hstate:' + o[0] + '">' + o[1] + '</button>';
-      }).join('') + '</div></div>';
   }
 
   // чипове за запълване на кофата (%) — общо за събиране/бърз режим
@@ -1074,6 +1071,16 @@
           '<div class="field"><label>Чиста ядка</label><input class="input" type="number" value="' + b.cleanKg + '" data-bkg="clean:' + b.id + '"/></div></div></div>';
       }).join('') +
       (isAdmin() ? '<button class="btn secondary mb" data-action="savebuckets">💾 Запази теглата на кофите</button>' : '') +
+      '</div></details>' +
+
+      '<details class="sect"><summary>🥥 Белене (зелени → обелени)</summary><div class="sect-body">' +
+      '<p class="muted mb" style="font-size:13px">Орехите се събират зелени, после ги белите. Тук казваш колко обелени кофи излизат от 1 зелена кофа. Бройката „обелени" горе на началния екран се смята автоматично.</p>' +
+      (isAdmin()
+        ? '<div class="card"><div class="field"><label>1 кофа зелени ≈ колко обелени кофи</label>' +
+          '<input id="shYield" class="input" type="number" step="0.05" min="0.05" value="' + shellYield() + '"/></div>' +
+          '<p class="muted" style="font-size:12px">Напр. 0.5 означава: 10 зелени кофи → 5 обелени кофи.</p>' +
+          '<button class="btn secondary" data-action="saveshellyield">💾 Запази</button></div>'
+        : '<div class="card"><div class="kv"><span class="k">1 зелена кофа ≈</span><span class="v">' + fmtKg(shellYield()) + ' обелени кофи</span></div></div>') +
       '</div></details>' +
 
       '<details class="sect"><summary>📐 Калкулатор за рандеман</summary><div class="sect-body">' +
@@ -1424,8 +1431,13 @@
     var ground = hv.groundKg > 0 ? '<div class="list-row"><div class="ic harvest">🍂</div>' +
       '<div class="tx"><b>От земята (зелени)</b><small>не е вързано към дърво</small></div>' +
       '<div class="meta"><b>' + fmtKg(hv.groundKg) + ' кг</b></div></div>' : '';
+    var greenBk = bucketsEq(hv.kg);
+    var shelledBk = greenBk * shellYield();
+    var shelledKg = shelledBk * refShelledKg();
     openSheet('<h3>Събрано ' + when + '</h3>' +
-      '<p class="muted mb" style="font-size:13px">Общо <b>' + fmtKg(hv.kg) + ' кг</b> · ' + fmtKg(bucketsEq(hv.kg)) + ' кофи. Маркирах дърветата на картата.</p>' +
+      '<p class="muted mb" style="font-size:13px">🟢 Зелени: <b>' + fmtKg(greenBk) + ' кофи</b> (≈ ' + fmtKg(hv.kg) + ' кг)<br>' +
+      '🥥 Обелени: <b>' + fmtKg(shelledBk) + ' кофи</b> (≈ ' + fmtKg(shelledKg) + ' кг) — автоматично от зеленото.<br>Маркирах дърветата на картата.</p>' +
+      '<div class="section-title" style="margin-top:0">Зелени кофи по дърво</div>' +
       '<div class="card">' + list + ground + '</div>' +
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
@@ -1642,7 +1654,6 @@
       case 'hmode': harvestMode = parts[1]; render(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
-      case 'hstate': harvestState = (parts[1] === 'shelled' || parts[1] === 'clean') ? parts[1] : 'green'; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
       case 'hfillstep': harvestFill = Math.max(5, Math.min(100, harvestFill + (parseInt(parts[1], 10) || 0))); render(); break;
       case 'hplus': stepHarvest(parts[1], 1); break;
@@ -1674,6 +1685,7 @@
 
       case 'savebuckets': saveBuckets(); break;
       case 'savecalc': saveCalc(); break;
+      case 'saveshellyield': saveShellYield(); break;
 
       case 'varnew': sheetVarietyNew(); break;
       case 'varedit': sheetVarietyEdit(parts[1]); break;
@@ -2154,6 +2166,12 @@
     db.settings.yieldInputKg = parseFloat(el('yin').value) || 0;
     db.settings.yieldOutputKg = parseFloat(el('yout').value) || 0;
     save(); render();
+  }
+  function saveShellYield() {
+    if (!isAdmin()) return;
+    var v = parseFloat(el('shYield').value);
+    if (!(v > 0)) { alert('Въведи число по-голямо от 0.'); return; }
+    db.settings.shellYield = v; save(); alert('Запазено!'); render();
   }
 
   function saveSale() {
