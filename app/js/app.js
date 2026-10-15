@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.37.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.38.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -25,6 +25,8 @@
   var mapMode = (function () { try { return localStorage.getItem(MAP_MODE_KEY) === 'harvest' ? 'harvest' : 'health'; } catch (e) { return 'health'; } })();   // 'health' | 'harvest' — по какво се оцветяват дърветата на картата
   var STAT_PERIOD_KEY = 'walnut_statperiod'; // „днес“ или „седмица“ за горните бройки (пази се на устройството)
   var statPeriod = (function () { try { return localStorage.getItem(STAT_PERIOD_KEY) === 'week' ? 'week' : 'today'; } catch (e) { return 'today'; } })();
+  var statsMode = 'season'; // изглед на Статистика: 'season' | 'month' | 'weeks'
+  var statsRef = null;      // Date-курсор за месец/седмици (кой месец / коя група седмици)
   var harvestHL = null;     // null или { id: kg } — подчертани дървета на картата (кой колко е дал)
   var statSuppressClick = false; // пропусни клика след суайп по бройките
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
@@ -997,7 +999,10 @@
   }
 
   function viewLog() {
-    var evs = isAdmin() ? db.events : activeEvents();
+    var evs = (isAdmin() ? db.events : activeEvents()).slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;      // по-новата дата отгоре
+      return (b.createdAt || 0) - (a.createdAt || 0);               // при същата дата — последно добавеното отгоре
+    });
     return topbar('Дневник / Чейндж лог', { back: 'nav:home' }) + '<div class="content">' +
       '<p class="muted mb">Всичко кой какво е правил, с дати и имена. Изтритото се пази (soft delete).</p>' +
       '<div class="card">' + (evs.length ? evs.slice(0, 100).map(logRow).join('') : '<p class="muted">Още няма записи.</p>') + '</div>' +
@@ -1014,24 +1019,54 @@
     var soldKg = db.sales.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
     var revenue = db.sales.reduce(function (s, x) { return s + (x.total || 0); }, 0);
 
-    // добив по етапи за сезона (орехите узряват основно Авг–Дек)
-    var seasonMonths = [7, 8, 9, 10, 11];
-    var seasonLabels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
-    var greenMon = new Array(12).fill(0), cleanMon = new Array(12).fill(0);
-    activeEvents().forEach(function (e) {
-      var d = new Date(e.date); if (d.getFullYear() !== year) return;
-      if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenMon[d.getMonth()] += eventKg(e);
-      else if (e.type === 'clean') cleanMon[d.getMonth()] += (e.kg || 0);
-    });
+    // добив по етапи за избрания изглед (сезон / месец / седмици)
+    var MONTHS_BG = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
     var sy = shellYield();
-    var greenVals = seasonMonths.map(function (m) { return greenMon[m]; });
+    function weekStart(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+    var greenVals = [], cleanVals = [], labels = [], periodTitle = '';
+    if (statsMode === 'month') {
+      var ref = statsRef || new Date();
+      var my = ref.getFullYear(), mm = ref.getMonth();
+      var dim = new Date(my, mm + 1, 0).getDate();
+      greenVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0);
+      activeEvents().forEach(function (e) {
+        var d = new Date(e.date); if (d.getFullYear() !== my || d.getMonth() !== mm) return;
+        var i = d.getDate() - 1;
+        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[i] += eventKg(e);
+        else if (e.type === 'clean') cleanVals[i] += (e.kg || 0);
+      });
+      labels = greenVals.map(function (_, i) { var dn = i + 1; return (dn === 1 || dn % 5 === 0) ? String(dn) : ''; });
+      periodTitle = MONTHS_BG[mm] + ' ' + my;
+    } else if (statsMode === 'weeks') {
+      var end = statsRef || new Date();
+      var weeks = [], ws = weekStart(end);
+      for (var i = 7; i >= 0; i--) { var s = new Date(ws); s.setDate(s.getDate() - i * 7); weeks.push(s); }
+      greenVals = new Array(8).fill(0); cleanVals = new Array(8).fill(0);
+      activeEvents().forEach(function (e) {
+        var d = new Date(e.date + 'T00:00:00');
+        for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); break; } }
+      });
+      labels = weeks.map(function (s) { return s.getDate() + '.' + (s.getMonth() + 1); });
+      periodTitle = labels[0] + ' – ' + weeks[7].getDate() + '.' + (weeks[7].getMonth() + 1);
+    } else {
+      var seasonMonths = [7, 8, 9, 10, 11];
+      labels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+      var gM = new Array(12).fill(0), cM = new Array(12).fill(0);
+      activeEvents().forEach(function (e) {
+        var d = new Date(e.date); if (d.getFullYear() !== year) return;
+        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') gM[d.getMonth()] += eventKg(e);
+        else if (e.type === 'clean') cM[d.getMonth()] += (e.kg || 0);
+      });
+      greenVals = seasonMonths.map(function (m) { return gM[m]; });
+      cleanVals = seasonMonths.map(function (m) { return cM[m]; });
+      periodTitle = 'Сезон ' + year;
+    }
     var shelledVals = greenVals.map(function (v) { return v * sy; });
-    var cleanVals = seasonMonths.map(function (m) { return cleanMon[m]; });
-    var greenYear = greenMon.reduce(function (a, b) { return a + b; }, 0);
-    var shelledYear = greenYear * sy;
-    var cleanYear = cleanMon.reduce(function (a, b) { return a + b; }, 0);
-    var pctShelled = greenYear > 0 ? Math.round(shelledYear / greenYear * 100) : 0;
-    var pctClean = shelledYear > 0 ? Math.round(cleanYear / shelledYear * 100) : 0;
+    var greenTot = greenVals.reduce(function (a, b) { return a + b; }, 0);
+    var shelledTot = greenTot * sy;
+    var cleanTot = cleanVals.reduce(function (a, b) { return a + b; }, 0);
+    var pctShelled = greenTot > 0 ? Math.round(shelledTot / greenTot * 100) : 0;
+    var pctClean = shelledTot > 0 ? Math.round(cleanTot / shelledTot * 100) : 0;
     // една стъпаловидна диаграма за даден етап
     function stageChart(emoji, title, cls, vals, total, pct, pctWord) {
       var mx = Math.max.apply(null, vals.concat([1]));
@@ -1040,7 +1075,7 @@
         '<div class="stagehead"><b>' + fmtKg(total) + ' кг</b>' + (pct !== null ? '<span class="stagepct">' + pct + '% от ' + pctWord + '</span>' : '') + '</div>' +
         '<div class="bars ' + cls + '">' +
         vals.map(function (v) { return '<div class="b" style="height:' + Math.max(4, (v / mx) * 100) + '%"></div>'; }).join('') +
-        '</div><div class="barlabels">' + seasonLabels.map(function (l) { return '<span>' + l + '</span>'; }).join('') + '</div>' +
+        '</div><div class="barlabels">' + labels.map(function (l) { return '<span>' + l + '</span>'; }).join('') + '</div>' +
         '</div>';
     }
 
@@ -1068,10 +1103,16 @@
       '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
-      '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи за сезон ' + year + ' (Авг–Дек). Всеки етап показва общото и колко процент е от предишния.</p>' +
-      stageChart('🟢', 'Зелени (кг)', 'greenbars', greenVals, greenYear, null, '') +
-      stageChart('🥥', 'Обелени (кг)', 'shelledbars', shelledVals, shelledYear, pctShelled, 'зелените') +
-      stageChart('🌰', 'Изчистени (кг)', 'cleanbars', cleanVals, cleanYear, pctClean, 'обелените') +
+      '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
+      '<div class="seg"><button class="' + (statsMode === 'season' ? 'active' : '') + '" data-action="statsmode:season">📆 Сезон</button>' +
+      '<button class="' + (statsMode === 'month' ? 'active' : '') + '" data-action="statsmode:month">📅 Месец</button>' +
+      '<button class="' + (statsMode === 'weeks' ? 'active' : '') + '" data-action="statsmode:weeks">🗓️ Седмици</button></div>' +
+      (statsMode !== 'season'
+        ? '<div class="stat-period"><span class="ar" data-action="statsprev">‹</span><span class="pl">' + periodTitle + '</span><span class="ar" data-action="statsnext">›</span></div>'
+        : '<div class="stat-period" style="cursor:default"><span class="pl">' + periodTitle + '</span></div>') +
+      stageChart('🟢', 'Зелени (кг)', 'greenbars', greenVals, greenTot, null, '') +
+      stageChart('🥥', 'Обелени (кг)', 'shelledbars', shelledVals, shelledTot, pctShelled, 'зелените') +
+      stageChart('🌰', 'Изчистени (кг)', 'cleanbars', cleanVals, cleanTot, pctClean, 'обелените') +
 
       '<div class="section-title">Най-доходоносни дървета</div>' +
       '<div class="card">' + (ranked.length ? ranked.map(function (r) {
@@ -1721,6 +1762,18 @@
       case 'statperiod': toggleStatPeriod(); break;
       case 'statbreak': showHarvestBreakdown(); break;
       case 'statclear': harvestHL = null; render(); break;
+      case 'statsmode':
+        statsMode = (parts[1] === 'month' || parts[1] === 'weeks') ? parts[1] : 'season';
+        if (statsMode === 'month') statsRef = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        else if (statsMode === 'weeks') statsRef = new Date();
+        else statsRef = null;
+        render(); break;
+      case 'statsprev': case 'statsnext': {
+        var dir = parts[0] === 'statsnext' ? 1 : -1;
+        if (statsMode === 'month') { var r = statsRef || new Date(); statsRef = new Date(r.getFullYear(), r.getMonth() + dir, 1); }
+        else if (statsMode === 'weeks') { var w = statsRef || new Date(); var n = new Date(w); n.setDate(n.getDate() + dir * 7 * 8); statsRef = n; }
+        render(); break;
+      }
       case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note, height: te.height } : null; sheetTreeEdit(parts[1]); break; }
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
