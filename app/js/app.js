@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.27.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.28.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -34,6 +34,16 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
   // пази само цифри и водещия „+“ за tel: връзка
   function telHref(s) { s = String(s == null ? '' : s).replace(/[^\d+]/g, ''); return s.replace(/(?!^)\+/g, ''); }
+  // форматира телефон с разстояния за четливост (набирането минава през telHref)
+  function fmtPhone(s) {
+    if (s == null) return '';
+    var raw = String(s).trim();
+    var plus = raw.charAt(0) === '+';
+    var d = raw.replace(/\D/g, '');
+    if (plus && d.slice(0, 3) === '359' && d.length === 12) return '+359 ' + d.slice(3).replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+    if (!plus && d.charAt(0) === '0' && d.length === 10) return d.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
+    return raw; // непознат формат — не пипай
+  }
   function save() { DB.save(db); if (window.Sync) window.Sync.push(); }
   function me() { return db.users.find(function (u) { return u.id === db.currentUserId; }) || null; }
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
@@ -2054,14 +2064,14 @@
   }
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
-    db.buyers.push({ id: DB.uid('buy'), name: name, phone: el('bPhone').value, note: el('bNote').value, createdAt: Date.now() });
+    db.buyers.push({ id: DB.uid('buy'), name: name, phone: fmtPhone(el('bPhone').value), note: el('bNote').value, createdAt: Date.now() });
     save(); closeSheet(); go('sales');
   }
 
   function saveEditBuyer(id) {
     var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
-    b.name = name; b.phone = el('bPhone').value; b.note = el('bNote').value;
+    b.name = name; b.phone = fmtPhone(el('bPhone').value); b.note = el('bNote').value;
     save(); closeSheet(); go('buyer', id);
   }
 
