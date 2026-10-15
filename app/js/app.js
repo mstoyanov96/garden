@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.32.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.33.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -310,6 +310,36 @@
   function refShelledKg() { var b = refBucket(); return b && b.shelledKg ? b.shelledKg : refBucketKg(); }
   // колко обелени кофи излизат от 1 зелена кофа (нагласва се в Настройки)
   function shellYield() { var y = db.settings ? db.settings.shellYield : null; return (y != null && y > 0) ? y : 0.5; }
+  // ръчно въведените обелени кофи за даден ден (най-новият активен запис), или null
+  function shellOverrideFor(dateISO) {
+    var found = null;
+    activeEvents().forEach(function (e) {
+      if (e.type === 'shell' && e.date === dateISO && (!found || e.createdAt > found.createdAt)) found = e;
+    });
+    return found;
+  }
+  // обобщава обелените кофи за период: ръчно въведеното за деня надделява над авто-сметката от зеленото
+  function shelledStats(period) {
+    var today = DB.todayISO();
+    var days = [];
+    if (period === 'week') {
+      for (var i = 6; i >= 0; i--) { var dd = new Date(); dd.setDate(dd.getDate() - i); days.push(dd.toISOString().slice(0, 10)); }
+      if (days.indexOf(today) === -1) days.push(today);
+    } else days = [today];
+    var greenByDay = {};
+    activeEvents().forEach(function (e) {
+      if (e.type !== 'harvest_tree' && e.type !== 'harvest_ground') return;
+      if (days.indexOf(e.date) === -1) return;
+      greenByDay[e.date] = (greenByDay[e.date] || 0) + eventKg(e);
+    });
+    var buckets = 0, manual = false;
+    days.forEach(function (dt) {
+      var ov = shellOverrideFor(dt);
+      if (ov) { buckets += (ov.buckets || 0); manual = true; }
+      else buckets += bucketsEq(greenByDay[dt] || 0) * shellYield();
+    });
+    return { buckets: buckets, kg: buckets * refShelledKg(), manual: manual };
+  }
   // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
   function bucketsEq(kg) { return (kg || 0) / refBucketKg(); }
 
@@ -485,13 +515,14 @@
     });
 
     var greenBk = bucketsEq(hv.kg);
-    var shelledBk = greenBk * shellYield();
-    var shelledKg = shelledBk * refShelledKg();
+    var sh = shelledStats(statPeriod);
+    var shelledBk = sh.buckets;
+    var shelledKg = sh.kg;
 
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row" id="statSwipe">' +
       '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(greenBk) + '</b><small>🟢 кофи зелени ' + perLbl + ' · ≈ ' + fmtKg(hv.kg) + ' кг</small></div>' +
-      '<div class="stat shelled harvstat" data-action="statbreak"><b>' + fmtKg(shelledBk) + '</b><small>🥥 кофи обелени ' + perLbl + ' · ≈ ' + fmtKg(shelledKg) + ' кг</small></div>' +
+      '<div class="stat shelled harvstat" data-action="statbreak"><b>' + fmtKg(shelledBk) + '</b><small>🥥 кофи обелени ' + perLbl + (sh.manual ? ' · ✏️ ръчно' : '') + ' · ≈ ' + fmtKg(shelledKg) + ' кг</small></div>' +
       '</div>' +
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
       (statPeriod === 'today' ? '📅 Днес' : '🗓️ Тази седмица (7 дни)') +
@@ -898,6 +929,7 @@
       fertilize: { ic: '🌱', cls: 'fert', t: 'Торене' },
       harvest_tree: { ic: '🧺', cls: 'harvest', t: 'Събиране (дърво)' },
       harvest_ground: { ic: '🍂', cls: 'harvest', t: 'Събиране (земя)' },
+      shell: { ic: '🥥', cls: 'harvest', t: 'Обелени (ръчно)' },
       mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
       photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
       tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
@@ -910,6 +942,7 @@
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
     if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
+    else if (e.type === 'shell') detail = fmtKg(e.buckets) + ' обелени кофи · ≈ ' + fmtKg((e.buckets || 0) * refShelledKg()) + ' кг';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -1432,13 +1465,26 @@
       '<div class="tx"><b>От земята (зелени)</b><small>не е вързано към дърво</small></div>' +
       '<div class="meta"><b>' + fmtKg(hv.groundKg) + ' кг</b></div></div>' : '';
     var greenBk = bucketsEq(hv.kg);
-    var shelledBk = greenBk * shellYield();
-    var shelledKg = shelledBk * refShelledKg();
+    var sh = shelledStats(statPeriod);
+    var shelledBk = sh.buckets;
+    var shelledKg = sh.kg;
+    var today = DB.todayISO();
+    var todayOv = shellOverrideFor(today);
+    var todayAuto = bucketsEq(harvestStats('today').kg) * shellYield();
+    var prefill = todayOv ? todayOv.buckets : fmtKg(todayAuto);
     openSheet('<h3>Събрано ' + when + '</h3>' +
       '<p class="muted mb" style="font-size:13px">🟢 Зелени: <b>' + fmtKg(greenBk) + ' кофи</b> (≈ ' + fmtKg(hv.kg) + ' кг)<br>' +
-      '🥥 Обелени: <b>' + fmtKg(shelledBk) + ' кофи</b> (≈ ' + fmtKg(shelledKg) + ' кг) — автоматично от зеленото.<br>Маркирах дърветата на картата.</p>' +
+      '🥥 Обелени: <b>' + fmtKg(shelledBk) + ' кофи</b> (≈ ' + fmtKg(shelledKg) + ' кг) — ' + (sh.manual ? 'включва ръчно въведени.' : 'автоматично от зеленото.') + '<br>Маркирах дърветата на картата.</p>' +
       '<div class="section-title" style="margin-top:0">Зелени кофи по дърво</div>' +
       '<div class="card">' + list + ground + '</div>' +
+      '<div class="section-title">✏️ Обелени кофи за днес (ръчно)</div>' +
+      '<div class="card">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">Накрая, като обелите, въведи колко кофи обелени излязоха днес. Записаното надделява над авто-сметката.' +
+      (todayOv ? '' : ' Сега сметнато: <b>' + fmtKg(todayAuto) + '</b> кофи.') + '</p>' +
+      '<div class="field"><label>Обелени кофи (днес)</label><input id="shToday" class="input" type="number" step="0.25" min="0" value="' + prefill + '"/></div>' +
+      '<button class="btn secondary" data-action="saveshelled">💾 Запиши обелените за днес</button>' +
+      (todayOv ? '<button class="btn sm ghost mt" data-action="clearshelled">↩️ Върни към авто-сметка</button>' : '') +
+      '</div>' +
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
 
@@ -1686,6 +1732,8 @@
       case 'savebuckets': saveBuckets(); break;
       case 'savecalc': saveCalc(); break;
       case 'saveshellyield': saveShellYield(); break;
+      case 'saveshelled': saveShelledToday(); break;
+      case 'clearshelled': clearShelledToday(); break;
 
       case 'varnew': sheetVarietyNew(); break;
       case 'varedit': sheetVarietyEdit(parts[1]); break;
@@ -2172,6 +2220,23 @@
     var v = parseFloat(el('shYield').value);
     if (!(v > 0)) { alert('Въведи число по-голямо от 0.'); return; }
     db.settings.shellYield = v; save(); alert('Запазено!'); render();
+  }
+  // ръчно въвеждане на реално обелените кофи за днес (надделява над авто-сметката)
+  function saveShelledToday() {
+    var v = parseFloat(el('shToday').value);
+    if (!(v >= 0)) { alert('Въведи брой кофи (0 или повече).'); return; }
+    var today = DB.todayISO();
+    var ex = null;
+    db.events.forEach(function (e) { if (!e.deletedAt && e.type === 'shell' && e.date === today) ex = e; });
+    if (ex) { ex.buckets = v; ex.createdAt = Date.now(); ex.createdBy = db.currentUserId; save(); }
+    else addEvent({ type: 'shell', date: today, buckets: v });
+    closeSheet(); render(); alert('Записано: ' + fmtKg(v) + ' обелени кофи за днес.');
+  }
+  // връща днешните обелени кофи към авто-сметката (маха ръчния запис)
+  function clearShelledToday() {
+    var today = DB.todayISO();
+    db.events.forEach(function (e) { if (!e.deletedAt && e.type === 'shell' && e.date === today) softDelete(e.id); });
+    closeSheet(); render();
   }
 
   function saveSale() {
