@@ -160,7 +160,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .stat-row{display:flex;gap:12px;margin-bottom:14px;}
 .stat{flex:1;border-radius:var(--radius);padding:16px;color:#fff;box-shadow:var(--shadow);}
 .stat b{display:block;font-size:26px;line-height:1.1;}
-.stat small{font-size:12px;opacity:.9;}
+.stat small{font-size:12px;opacity:.9;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .stat.green{background:linear-gradient(135deg,#34a85a,#1f7a43);}
 .stat.blue{background:linear-gradient(135deg,#3a90e6,#2563c9);}
 .stat.purple{background:linear-gradient(135deg,#8b63d6,#6a3fc0);}

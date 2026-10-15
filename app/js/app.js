@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.30.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.30.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -466,7 +466,7 @@
     var counts = { green: 0, yellow: 0, red: 0 };
     db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) { counts[t.health]++; });
     var hv = harvestStats(statPeriod);
-    var perLbl = statPeriod === 'today' ? 'днес' : '· 7 дни';
+    var perLbl = statPeriod === 'today' ? 'днес' : '7д';
 
     var fr = { fresh: 0, week: 0, old: 0 }, doneToday = 0;
     db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) {
@@ -478,7 +478,7 @@
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row" id="statSwipe">' +
       '<div class="stat green harvstat" data-action="statbreak"><b>' + fmtKg(bucketsEq(hv.kg)) + '</b><small>кофи ' + perLbl + '</small></div>' +
-      '<div class="stat blue harvstat" data-action="statbreak"><b>' + fmtKg(hv.kg) + '</b><small>кг (зелени) ' + perLbl + '</small></div>' +
+      '<div class="stat blue harvstat" data-action="statbreak"><b>' + fmtKg(hv.kg) + '</b><small>кг зелени ' + perLbl + '</small></div>' +
       '<div class="stat plain"><b>' + counts.green + '</b><small>здрави дървета</small></div>' +
       '</div>' +
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
