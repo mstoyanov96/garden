@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.30.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.31.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -12,6 +12,7 @@
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
+  var harvestState = 'green'; // в какъв вид са кофите: 'green' зелени | 'shelled' обелени с черупка | 'clean' чиста ядка
   var treeHarvestOpen = '';   // id на дърво с отворена вградена форма за събиране
   var treeDetailsOpen = false; // показани ли са подробните данни за дървото
   var careScope = 'all';    // 'all' | 'rows' | 'tree' | 'trees' — обхват на грижата
@@ -276,6 +277,9 @@
   }
 
   // ---- Bucket math -------------------------------------------------------
+  // тегло на 1 кофа според вида: зелени / обелени с черупка / чиста ядка
+  function stateKg(b, state) { return !b ? 0 : (state === 'clean' ? b.cleanKg : state === 'shelled' ? b.shelledKg : b.greenKg); }
+  function stateLabel(state) { return state === 'clean' ? 'чиста ядка' : state === 'shelled' ? 'обелени (с черупка)' : 'зелени'; }
   function eventKg(ev) {
     if (!ev.buckets) return 0;
     var fill = (ev.fill != null ? ev.fill : 100) / 100; // колко пълни са били кофите
@@ -704,8 +708,9 @@
       db.settings.buckets.map(function (bk) {
         return '<button class="bpick' + (bk.id === harvestBucket ? ' active' : '') + '" data-action="hbuck:' + bk.id + '">' +
           '<span class="bpic">' + bucketIcon(bk) + '</span>' +
-          '<b>' + esc(bk.name) + '</b><small>1 кофа ≈ ' + bk.greenKg + ' кг</small></button>';
+          '<b>' + esc(bk.name) + '</b><small>1 кофа ≈ ' + fmtKg(stateKg(bk, harvestState)) + ' кг</small></button>';
       }).join('') + '</div></div>' +
+      stateChips() +
       counterRow(id, 'Колко кофи', b ? b.name : '', val) +
       fillChips() +
       '<div class="field"><label>Дата</label><input id="thdate" type="date" class="input" value="' + today + '"/></div>' +
@@ -734,8 +739,9 @@
       db.settings.buckets.map(function (b) {
         return '<button class="bpick' + (b.id === harvestBucket ? ' active' : '') + '" data-action="hbuck:' + b.id + '">' +
           '<span class="bpic">' + bucketIcon(b) + '</span>' +
-          '<b>' + esc(b.name) + '</b><small>1 кофа ≈ ' + b.greenKg + ' кг</small></button>';
+          '<b>' + esc(b.name) + '</b><small>1 кофа ≈ ' + fmtKg(stateKg(b, harvestState)) + ' кг</small></button>';
       }).join('') + '</div></div>';
+    body += stateChips();
     body += '<div class="field"><label>Дата</label><input id="hdate" type="date" class="input" value="' + today + '"/></div>';
     body += fillChips();
 
@@ -756,8 +762,8 @@
       });
     } else {
       var val = (harvestDraft['ground'] && harvestDraft['ground']._count) || 0;
-      body += '<div class="section-title">Орехи събрани от земята (зелени)</div>' +
-        counterRow('ground', 'От земята', 'Зелени орехи', val);
+      body += '<div class="section-title">Орехи събрани от земята (' + stateLabel(harvestState) + ')</div>' +
+        counterRow('ground', 'От земята', stateLabel(harvestState).charAt(0).toUpperCase() + stateLabel(harvestState).slice(1) + ' орехи', val);
     }
 
     body += '<div class="card mt">' +
@@ -780,10 +786,19 @@
       '</div></div>';
   }
 
+  // чипове за вида на кофите: зелени / обелени с черупка / чиста ядка
+  function stateChips() {
+    var opts = [['green', '🟢 Зелени'], ['shelled', '🥥 Обелени (с черупка)'], ['clean', '🌰 Чиста ядка']];
+    return '<div class="field"><label>В какъв вид са кофите?</label><div class="rowfilter">' +
+      opts.map(function (o) {
+        return '<button class="' + (harvestState === o[0] ? 'active' : '') + '" data-action="hstate:' + o[0] + '">' + o[1] + '</button>';
+      }).join('') + '</div></div>';
+  }
+
   // чипове за запълване на кофата (%) — общо за събиране/бърз режим
   function fillChips() {
     var fb = bucket(harvestBucket);
-    var oneKg = fb ? fb.greenKg * harvestFill / 100 : 0;
+    var oneKg = fb ? stateKg(fb, harvestState) * harvestFill / 100 : 0;
     var lcName = fb ? fb.name.charAt(0).toLowerCase() + fb.name.slice(1) : '';
     var hint = fb ? ('1 ' + esc(lcName) + (harvestFill !== 100 ? ' на ' + harvestFill + '%' : '') + ' ≈ <b>' + fmtKg(oneKg) + ' кг</b>') : '';
     return '<div class="field"><label>Колко пълни бяха кофите?</label><div class="rowfilter">' +
@@ -897,7 +912,7 @@
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
-    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг';
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -1627,6 +1642,7 @@
       case 'hmode': harvestMode = parts[1]; render(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
+      case 'hstate': harvestState = (parts[1] === 'shelled' || parts[1] === 'clean') ? parts[1] : 'green'; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
       case 'hfillstep': harvestFill = Math.max(5, Math.min(100, harvestFill + (parseInt(parts[1], 10) || 0))); render(); break;
       case 'hplus': stepHarvest(parts[1], 1); break;
@@ -2039,9 +2055,9 @@
       if (cnt <= 0) return;
       var buckets = {}; buckets[bucketId] = cnt;
       if (key === 'ground') {
-        addEvent({ type: 'harvest_ground', date: date, state: 'green', buckets: buckets, fill: harvestFill });
+        addEvent({ type: 'harvest_ground', date: date, state: harvestState, buckets: buckets, fill: harvestFill });
       } else {
-        addEvent({ type: 'harvest_tree', treeId: key, date: date, state: 'green', buckets: buckets, fill: harvestFill });
+        addEvent({ type: 'harvest_tree', treeId: key, date: date, state: harvestState, buckets: buckets, fill: harvestFill });
       }
       saved++;
     });
@@ -2057,7 +2073,7 @@
     var date = (el('thdate') && el('thdate').value) ? el('thdate').value : DB.todayISO();
     if (cnt <= 0) { alert('Добави поне 1 кофа.'); return; }
     var buckets = {}; buckets[bid] = cnt;
-    addEvent({ type: 'harvest_tree', treeId: id, date: date, state: 'green', buckets: buckets, fill: harvestFill });
+    addEvent({ type: 'harvest_tree', treeId: id, date: date, state: harvestState, buckets: buckets, fill: harvestFill });
     delete harvestDraft[id];
     treeHarvestOpen = '';
     render();
