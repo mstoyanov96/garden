@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.25.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.26.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1057,7 +1057,7 @@
       (isAdmin() ? '<button class="btn secondary mt" data-action="changemypass">🔑 Смени моята парола</button>' : '') +
       '</div></details>' +
 
-      '<div class="section-title">Размер на изгледа</div>' +
+      '<details class="sect"><summary>🔍 Размер на изгледа</summary><div class="sect-body">' +
       '<div class="card"><p class="muted mb" style="font-size:13px">Уголеми или смали всичко в приложението, за да се чете по-лесно.</p>' +
       '<div class="row" style="align-items:center">' +
       '<button class="btn secondary" data-action="zoomout">➖ По-малко</button>' +
@@ -1066,13 +1066,15 @@
       '</div>' +
       '<button class="btn ghost mt" data-action="zoomreset">↺ Нормален размер (100%)</button>' +
       '</div>' +
+      '</div></details>' +
 
-      '<div class="section-title">Версия и обновяване</div>' +
+      '<details class="sect"><summary>📱 Версия и обновяване</summary><div class="sect-body">' +
       '<div class="card">' +
       '<div class="kv"><span class="k">📱 Версия</span><span class="v">' + APP_VERSION + '</span></div>' +
       '<p class="muted" id="updState" style="font-size:13px;margin:10px 0">Натисни, за да провериш за нова версия.</p>' +
       '<button class="btn secondary" data-action="checkupdate">🔄 Провери за нова версия</button>' +
       '</div>' +
+      '</div></details>' +
 
       '<button class="btn ghost mt" data-action="logout">🚪 Смени потребител</button>' +
       (isAdmin() ? '<button class="btn ghost mt" data-action="reset" style="border-color:#f3c9c6;color:#b23a33">🗑️ Нулирай всички данни</button>' : '') +
