@@ -175,6 +175,13 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
   font-size:14px;font-weight:700;color:var(--green-dark);cursor:pointer;user-select:none;}
 .stat-period .ar{font-size:20px;color:var(--muted);line-height:1;}
 .stat-period .pl{min-width:170px;text-align:center;}
+/* карта за изчистена ядка (рандеман) с лента на напредъка */
+.kernelcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px;box-shadow:var(--shadow);cursor:pointer;}
+.kernelhead{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:15px;font-weight:700;color:var(--green-dark);margin-bottom:9px;}
+.kernelhead b{font-size:18px;white-space:nowrap;}
+.kprog{height:14px;border-radius:8px;background:var(--green-soft);overflow:hidden;}
+.kprog-fill{height:100%;background:linear-gradient(90deg,#8b63d6,#6a3fc0);border-radius:8px;transition:width .3s;}
+.kernelsub{font-size:13px;color:var(--muted);margin-top:9px;}
 /* банер при маркирани дървета на картата */
 .hl-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   background:#fff6e0;border:1px solid #f3d58a;border-radius:12px;padding:8px 10px;margin-bottom:12px;

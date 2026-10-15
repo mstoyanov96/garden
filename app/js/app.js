@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.33.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.34.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -318,7 +318,8 @@
     });
     return found;
   }
-  // обобщава обелените кофи за период: ръчно въведеното за деня надделява над авто-сметката от зеленото
+  // обобщава обелените кофи за период: ръчно въведеното за деня надделява над авто-сметката.
+  // авто-сметката е в килограми: обелени кг = зелени кг × коефициент (shellYield).
   function shelledStats(period) {
     var today = DB.todayISO();
     var days = [];
@@ -332,13 +333,42 @@
       if (days.indexOf(e.date) === -1) return;
       greenByDay[e.date] = (greenByDay[e.date] || 0) + eventKg(e);
     });
-    var buckets = 0, manual = false;
+    var buckets = 0, kg = 0, manual = false;
     days.forEach(function (dt) {
       var ov = shellOverrideFor(dt);
-      if (ov) { buckets += (ov.buckets || 0); manual = true; }
-      else buckets += bucketsEq(greenByDay[dt] || 0) * shellYield();
+      if (ov) { buckets += (ov.buckets || 0); kg += (ov.buckets || 0) * refShelledKg(); manual = true; }
+      else { var dKg = (greenByDay[dt] || 0) * shellYield(); kg += dKg; buckets += dKg / refShelledKg(); }
     });
-    return { buckets: buckets, kg: buckets * refShelledKg(), manual: manual };
+    return { buckets: buckets, kg: kg, manual: manual };
+  }
+  // рандеман: каква част от обелените (с черупка) е чиста ядка — от калкулатора в Настройки
+  function kernelYield() {
+    var s = db.settings;
+    if (s && s.yieldInputKg > 0 && s.yieldOutputKg > 0) return s.yieldOutputKg / s.yieldInputKg;
+    return 0.48;
+  }
+  // общо обелени (с черупка) кг за целия сезон — ръчното за деня надделява над авто-сметката
+  function totalShelledKg() {
+    var greenByDay = {}, dates = {};
+    activeEvents().forEach(function (e) {
+      if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenByDay[e.date] = (greenByDay[e.date] || 0) + eventKg(e); dates[e.date] = 1; }
+      else if (e.type === 'shell') dates[e.date] = 1;
+    });
+    var total = 0;
+    Object.keys(dates).forEach(function (dt) {
+      var ov = shellOverrideFor(dt);
+      if (ov) total += (ov.buckets || 0) * refShelledKg();
+      else total += (greenByDay[dt] || 0) * shellYield();
+    });
+    return total;
+  }
+  // обобщава изчистената ядка: очаквано (от рандемана), въведено досега и колко остава
+  function kernelStats() {
+    var shelledKg = totalShelledKg();
+    var expected = shelledKg * kernelYield();
+    var actual = 0;
+    activeEvents().forEach(function (e) { if (e.type === 'clean') actual += (e.kg || 0); });
+    return { expected: expected, actual: actual, remaining: Math.max(0, expected - actual) };
   }
   // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
   function bucketsEq(kg) { return (kg || 0) / refBucketKg(); }
@@ -518,6 +548,8 @@
     var sh = shelledStats(statPeriod);
     var shelledBk = sh.buckets;
     var shelledKg = sh.kg;
+    var ks = kernelStats();
+    var kpct = ks.expected > 0 ? Math.min(100, Math.round(ks.actual / ks.expected * 100)) : 0;
 
     return topbar('Орехова градина') + '<div class="content">' +
       '<div class="stat-row" id="statSwipe">' +
@@ -529,6 +561,13 @@
       '</span><span class="ar">›</span></div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + (statPeriod === 'today' ? 'днес' : 'тази седмица') +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
+
+      ((ks.expected > 0 || ks.actual > 0) ?
+        '<div class="kernelcard" data-action="kernel">' +
+        '<div class="kernelhead"><span>🌰 Изчистена ядка (общо)</span><b>' + fmtKg(ks.actual) + ' / ' + fmtKg(ks.expected) + ' кг</b></div>' +
+        '<div class="kprog"><div class="kprog-fill" style="width:' + kpct + '%"></div></div>' +
+        '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '%' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
+        '</div>' : '') +
 
       '<div class="section-title title-row"><span class="tl">Карта на градината' +
       (isAdmin() ? ' <button class="iconbtn' + (editMode ? ' on' : '') + '" data-action="editschema" aria-label="Редактирай схемата">' + (editMode ? '✓' : '✏️') + '</button>' : '') +
@@ -930,6 +969,7 @@
       harvest_tree: { ic: '🧺', cls: 'harvest', t: 'Събиране (дърво)' },
       harvest_ground: { ic: '🍂', cls: 'harvest', t: 'Събиране (земя)' },
       shell: { ic: '🥥', cls: 'harvest', t: 'Обелени (ръчно)' },
+      clean: { ic: '🌰', cls: 'harvest', t: 'Изчистена ядка' },
       mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
       photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
       tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
@@ -943,6 +983,7 @@
     var detail = '';
     if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBuckets(e) + ' кофи' + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
     else if (e.type === 'shell') detail = fmtKg(e.buckets) + ' обелени кофи · ≈ ' + fmtKg((e.buckets || 0) * refShelledKg()) + ' кг';
+    else if (e.type === 'clean') detail = fmtKg(e.kg) + ' кг чиста ядка';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -1107,16 +1148,17 @@
       '</div></details>' +
 
       '<details class="sect"><summary>🥥 Белене (зелени → обелени)</summary><div class="sect-body">' +
-      '<p class="muted mb" style="font-size:13px">Орехите се събират зелени, после ги белите. Тук казваш колко обелени кофи излизат от 1 зелена кофа. Бройката „обелени" горе на началния екран се смята автоматично.</p>' +
+      '<p class="muted mb" style="font-size:13px">Орехите се събират зелени, после ги белите. Тук казваш колко килограма обелени (с черупка) излизат от 1 кг зелени. Бройката „обелени" горе на началния екран се смята автоматично по тегло.</p>' +
       (isAdmin()
-        ? '<div class="card"><div class="field"><label>1 кофа зелени ≈ колко обелени кофи</label>' +
+        ? '<div class="card"><div class="field"><label>1 кг зелени → колко кг обелени</label>' +
           '<input id="shYield" class="input" type="number" step="0.05" min="0.05" value="' + shellYield() + '"/></div>' +
-          '<p class="muted" style="font-size:12px">Напр. 0.5 означава: 10 зелени кофи → 5 обелени кофи.</p>' +
+          '<p class="muted" style="font-size:12px">Напр. 0.5 означава: 10 кг зелени → 5 кг обелени.</p>' +
           '<button class="btn secondary" data-action="saveshellyield">💾 Запази</button></div>'
-        : '<div class="card"><div class="kv"><span class="k">1 зелена кофа ≈</span><span class="v">' + fmtKg(shellYield()) + ' обелени кофи</span></div></div>') +
+        : '<div class="card"><div class="kv"><span class="k">1 кг зелени ≈</span><span class="v">' + fmtKg(shellYield()) + ' кг обелени</span></div></div>') +
       '</div></details>' +
 
       '<details class="sect"><summary>📐 Калкулатор за рандеман</summary><div class="sect-body">' +
+      '<p class="muted mb" style="font-size:13px">Този процент се ползва и за „🌰 Изчистена ядка" на началния екран — очакваната чиста ядка = събрани обелени × рандеман.</p>' +
       (isAdmin()
         ? '<div class="card"><div class="row">' +
           '<div class="field"><label>Вход — сухи с черупка (кг)</label><input id="yin" class="input" type="number" value="' + s.yieldInputKg + '"/></div>' +
@@ -1470,7 +1512,7 @@
     var shelledKg = sh.kg;
     var today = DB.todayISO();
     var todayOv = shellOverrideFor(today);
-    var todayAuto = bucketsEq(harvestStats('today').kg) * shellYield();
+    var todayAuto = (harvestStats('today').kg * shellYield()) / refShelledKg();
     var prefill = todayOv ? todayOv.buckets : fmtKg(todayAuto);
     openSheet('<h3>Събрано ' + when + '</h3>' +
       '<p class="muted mb" style="font-size:13px">🟢 Зелени: <b>' + fmtKg(greenBk) + ' кофи</b> (≈ ' + fmtKg(hv.kg) + ' кг)<br>' +
@@ -1734,6 +1776,8 @@
       case 'saveshellyield': saveShellYield(); break;
       case 'saveshelled': saveShelledToday(); break;
       case 'clearshelled': clearShelledToday(); break;
+      case 'kernel': showKernel(); break;
+      case 'addclean': addCleanEntry(); break;
 
       case 'varnew': sheetVarietyNew(); break;
       case 'varedit': sheetVarietyEdit(parts[1]); break;
@@ -2237,6 +2281,44 @@
     var today = DB.todayISO();
     db.events.forEach(function (e) { if (!e.deletedAt && e.type === 'shell' && e.date === today) softDelete(e.id); });
     closeSheet(); render();
+  }
+  // екран за изчистената ядка: очаквано (рандеман), въведено досега, остатък + добавяне
+  function showKernel() {
+    var ks = kernelStats();
+    var pct = ks.expected > 0 ? Math.min(100, Math.round(ks.actual / ks.expected * 100)) : 0;
+    var entries = activeEvents().filter(function (e) { return e.type === 'clean'; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
+    var list = entries.length ? entries.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      return '<div class="list-row"><div class="ic harvest">🌰</div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) +
+        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
+    openSheet('<h3>🌰 Изчистена ядка (рандеман)</h3>' +
+      '<p class="muted mb" style="font-size:13px">Очакваното се смята от събраните обелени (с черупка) × рандеман <b>' + Math.round(kernelYield() * 100) + '%</b> (от калкулатора в Настройки).</p>' +
+      '<div class="card">' +
+      '<div class="kv"><span class="k">Очаквано</span><span class="v"><b>' + fmtKg(ks.expected) + ' кг</b></span></div>' +
+      '<div class="kv"><span class="k">Изчистено досега</span><span class="v"><b>' + fmtKg(ks.actual) + ' кг</b></span></div>' +
+      '<div class="kv"><span class="k">Остават</span><span class="v"><b>' + fmtKg(ks.remaining) + ' кг</b></span></div>' +
+      '<div class="kprog" style="margin-top:10px"><div class="kprog-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>' +
+      '<div class="section-title">Добави изчистени</div>' +
+      '<div class="card">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">Като изчистиш още, въведи колко кг чиста ядка добавяш. Бройката „изчистено" расте и остатъкът намалява.</p>' +
+      '<div class="field"><label>Колко кг изчистена ядка добавяш</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<button class="btn secondary" data-action="addclean">➕ Добави към изчистените</button>' +
+      '</div>' +
+      '<div class="section-title">Въведени досега</div>' +
+      '<div class="card">' + list + '</div>' +
+      '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
+  }
+  function addCleanEntry() {
+    var v = parseFloat(el('clKg').value);
+    if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
+    addEvent({ type: 'clean', date: DB.todayISO(), kg: v });
+    render(); showKernel();
   }
 
   function saveSale() {
