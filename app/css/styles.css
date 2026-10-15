@@ -219,6 +219,11 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell .svgwrap{width:100%;max-width:44px;aspect-ratio:1;transition:transform .1s;}
 .tree-cell:active .svgwrap{transform:scale(.9);}
 .tree-cell .code{font-size:9px;font-weight:700;color:var(--muted);line-height:1;}
+/* надпис „преди колко е брано“ (режим „Събиране“) */
+.tree-cell .age{font-size:9px;font-weight:800;line-height:1;padding:1px 4px;border-radius:7px;background:#eef1ee;color:var(--muted);}
+.tree-cell .age.today{background:var(--green-soft);color:var(--green-dark);}
+.tree-cell .age.week{background:var(--yellow-soft);color:#9a6b11;}
+.tree-cell .age.old{background:#e7ece8;color:#6f7d73;}
 .tree-cell.sel .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));}
 .tree-cell.small-badge .svgwrap{background:#efeaff;border:2px solid #7c5cff;border-radius:50%;box-sizing:border-box;padding:3px;}
 .tree-cell.small-badge .code{background:#7c5cff;color:#fff;padding:1px 6px;border-radius:8px;}

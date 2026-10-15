@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.22.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.23.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -128,6 +128,15 @@
     if (days <= 1) return 'today';   // днес или вчера
     if (days <= 7) return 'week';    // тази седмица
     return 'old';                    // отдавна
+  }
+  // кратък надпис преди колко е брано: „днес“, „7д“, „3м“ (месеци след 30 дни)
+  function harvestAgoLabel(treeId) {
+    var iso = lastHarvestISO(treeId);
+    if (!iso) return '';
+    var days = Math.floor((Date.now() - new Date(iso + 'T00:00:00').getTime()) / 86400000);
+    if (days <= 0) return 'днес';
+    if (days < 30) return days + 'д';
+    return Math.round(days / 30) + 'м';
   }
 
   // ---- GPS helpers -------------------------------------------------------
@@ -547,15 +556,18 @@
           var small = v && v.size === 'small' ? ' small-badge' : '';
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
-          var svg, doneCls = '';
+          var svg, doneCls = '', ageHtml = '';
           if (mode === 'harvest') {
-            svg = treeSVGColors(FRESH_COLORS[harvestFreshness(t.id)]);
+            var fresh = harvestFreshness(t.id);
+            svg = treeSVGColors(FRESH_COLORS[fresh]);
             if (harvestedToday(t.id)) doneCls = ' harvested-today';
+            var al = harvestAgoLabel(t.id);
+            if (al) ageHtml = '<span class="age ' + fresh + '">' + al + '</span>';
           } else {
             svg = treeSVG(t.health);
           }
           html += '<div class="tree-cell' + small + sel + doneCls + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
-            '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span></div>';
+            '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span>' + ageHtml + '</div>';
         } else if (edit && !isReserved) {
           html += '<div class="cell-empty" data-action="addtree:' + rk + ':' + c + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2">＋</div>';
         }
