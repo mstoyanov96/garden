@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.47.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.47.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1341,6 +1341,17 @@
           Math.round((s.yieldOutputKg / (s.yieldInputKg || 1)) * 100) + '%</div></div>') +
       '</div></details>' +
 
+      '<details class="sect"><summary>⚪ Среден дял бели (калибровка)</summary><div class="sect-body">' +
+      '<p class="muted mb" style="font-size:13px">Ако още няма сортиране, тук задаваш очаквания дял: от 1 кофа начупени — колко излизат бели и колко черни. Служи само за „очаквано бели" (презаписва се от реалното сортиране).</p>' +
+      (isAdmin()
+        ? '<div class="card"><div class="row">' +
+          '<div class="field"><label>⚪ Бели ядки</label><input id="whiteKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.whiteKg != null ? db.settings.whiteKg : '') + '"/></div>' +
+          '<div class="field"><label>⚫ Черни ядки</label><input id="blackKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.blackKg != null ? db.settings.blackKg : '') + '"/></div></div>' +
+          '<div class="kv"><span class="k">Дял бели</span><span class="v"><b>' + ((db.settings.whiteKg > 0 || db.settings.blackKg > 0) ? Math.round((db.settings.whiteKg || 0) / ((db.settings.whiteKg || 0) + (db.settings.blackKg || 0)) * 100) + '%' : '—') + '</b></span></div>' +
+          '<button class="btn secondary" data-action="savewhiteblack">💾 Запази дела</button></div>'
+        : '<div class="card"><div class="kv"><span class="k">Дял бели</span><span class="v"><b>' + ((db.settings.whiteKg > 0 || db.settings.blackKg > 0) ? Math.round((db.settings.whiteKg || 0) / ((db.settings.whiteKg || 0) + (db.settings.blackKg || 0)) * 100) + '%' : '—') + '</b></span></div></div>') +
+      '</div></details>' +
+
       '<details class="sect"><summary>👥 Потребители и роли</summary><div class="sect-body">' +
       (isOwner() ? '<p class="muted mb" style="font-size:13px">Ти си главният стопанин. Само ти можеш да правиш други хора администратори.</p>' : '') +
       '<div class="card">' + db.users.filter(function (u) { return !u.deletedAt; }).map(function (u) {
@@ -2585,15 +2596,6 @@
       '<button class="btn secondary" data-action="addsort">➕ Добави сортирани</button>' +
       '</div>' +
       '<div class="card">' + sortList + '</div>' +
-      '<div class="section-title">⚪ Среден дял бели (калибровка)</div>' +
-      '<div class="card">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">Ако още няма сортиране, тук задаваш очаквания дял: от 1 кофа начупени — колко излизат бели и колко черни. Служи само за „очаквано бели" (презаписва се).</p>' +
-      '<div class="row">' +
-      '<div class="field"><label>⚪ Бели ядки</label><input id="whiteKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.whiteKg != null ? db.settings.whiteKg : '') + '"/></div>' +
-      '<div class="field"><label>⚫ Черни ядки</label><input id="blackKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.blackKg != null ? db.settings.blackKg : '') + '"/></div></div>' +
-      '<div class="kv"><span class="k">Дял бели</span><span class="v"><b>' + ((db.settings.whiteKg > 0 || db.settings.blackKg > 0) ? Math.round((db.settings.whiteKg || 0) / ((db.settings.whiteKg || 0) + (db.settings.blackKg || 0)) * 100) + '%' : '—') + '</b></span></div>' +
-      '<button class="btn secondary" data-action="savewhiteblack">💾 Запази дела</button>' +
-      '</div>' +
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
   function addCleanEntry() {
@@ -2615,6 +2617,7 @@
   }
   // запазва колко бели и колко черни ядки излизат от 1 кофа начупени (презаписва се)
   function saveWhiteBlack() {
+    if (!isAdmin()) return;
     var w = parseFloat(el('whiteKg').value);
     var k = parseFloat(el('blackKg').value);
     if (!(w >= 0)) w = 0;
@@ -2622,7 +2625,7 @@
     if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
     db.settings.whiteKg = w;
     db.settings.blackKg = k;
-    save(); render(); showKernel();
+    save(); render();
   }
 
   function saveSale() {
