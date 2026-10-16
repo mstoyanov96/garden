@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.51.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.52.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1404,12 +1404,14 @@
         if (!isAdmin()) {
           return '<div class="card">' + head +
             '<div class="kv"><span class="k">Вместимост</span><span class="v">' + (b.liters != null ? b.liters + ' л' : '—') + '</span></div>' +
+            '<div class="kv"><span class="k">Празна кофа</span><span class="v">' + (b.tareKg != null ? b.tareKg + ' кг' : '—') + '</span></div>' +
             '<div class="kv"><span class="k">Зелени</span><span class="v">' + b.greenKg + ' кг</span></div>' +
             '<div class="kv"><span class="k">С черупка</span><span class="v">' + b.shelledKg + ' кг</span></div>' +
             '<div class="kv"><span class="k">Чиста ядка</span><span class="v">' + b.cleanKg + ' кг</span></div></div>';
         }
         return '<div class="card">' + head +
-          '<div class="field"><label>Вместимост (литри)</label><input class="input" type="number" value="' + (b.liters != null ? b.liters : '') + '" data-bkg="liters:' + b.id + '"/></div>' +
+          '<div class="row"><div class="field"><label>Вместимост (литри)</label><input class="input" type="number" value="' + (b.liters != null ? b.liters : '') + '" data-bkg="liters:' + b.id + '"/></div>' +
+          '<div class="field"><label>Тегло на празната кофа (кг)</label><input class="input" type="number" step="0.01" min="0" value="' + (b.tareKg != null ? b.tareKg : '') + '" data-bkg="tare:' + b.id + '"/></div></div>' +
           '<div class="row"><div class="field"><label>Зелени (кг)</label><input class="input" type="number" value="' + b.greenKg + '" data-bkg="green:' + b.id + '"/></div>' +
           '<div class="field"><label>С черупка</label><input class="input" type="number" value="' + b.shelledKg + '" data-bkg="shelled:' + b.id + '"/></div>' +
           '<div class="field"><label>Чиста ядка</label><input class="input" type="number" value="' + b.cleanKg + '" data-bkg="clean:' + b.id + '"/></div></div></div>';
@@ -2610,7 +2612,8 @@
       vals[bid] = vals[bid] || {};
       vals[bid][field] = val;
       var cur = field === 'green' ? b.greenKg : field === 'shelled' ? b.shelledKg : field === 'clean' ? b.cleanKg : b.liters;
-      if (field !== 'liters' && val !== (cur || 0)) weightChanged = true;
+      // само теглата на съдържанието (зелени/с черупка/чиста ядка) засягат кг на записите
+      if ((field === 'green' || field === 'shelled' || field === 'clean') && val !== (cur || 0)) weightChanged = true;
     });
     if (!weightChanged) { applyBucketVals(vals); save(); alert('Запазено!'); return; }
     // теглото се е сменило → питаме какво да правим със старите записи (кг се смятат по тегло на кофата)
@@ -2631,6 +2634,7 @@
       if (v.green != null) b.greenKg = v.green;
       if (v.shelled != null) b.shelledKg = v.shelled;
       if (v.clean != null) b.cleanKg = v.clean;
+      if (v.tare != null) b.tareKg = v.tare;
       if (v.liters != null) { b.liters = v.liters; b.capacityNote = '≈ ' + v.liters + ' л'; }
     });
   }
