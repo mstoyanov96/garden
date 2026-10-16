@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.49.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.49.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1453,7 +1453,7 @@
       '</div>' +
       '</div></details>' +
 
-      '<button class="btn ghost mt" data-action="logout">🚪 Смени потребител</button>' +
+      '<button class="btn secondary mt" data-action="logout">🚪 Смени потребител</button>' +
       '<p class="center muted mt">По-добра грижа = по-голям добив 🌰</p>' +
       '</div>';
   }
