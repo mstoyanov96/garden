@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.53.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.54.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -282,8 +282,16 @@
   }
 
   // ---- Bucket math -------------------------------------------------------
-  // тегло на 1 кофа според вида: зелени / обелени с черупка / чиста ядка
-  function stateKg(b, state) { return !b ? 0 : (state === 'clean' ? b.cleanKg : state === 'shelled' ? b.shelledKg : b.greenKg); }
+  // нето тегло на 1 кофа: въведеното (с кофата) минус теглото на самата кофа (tareKg)
+  function bucketNetKg(b, field) {
+    if (!b) return 0;
+    var raw = field === 'clean' ? b.cleanKg : field === 'shelled' ? b.shelledKg : b.greenKg;
+    if (!(raw > 0)) return 0;
+    var net = raw - (b.tareKg || 0);
+    return net > 0 ? net : 0;
+  }
+  // тегло на 1 кофа според вида: зелени / обелени с черупка / чиста ядка (вече без кофата)
+  function stateKg(b, state) { return !b ? 0 : bucketNetKg(b, state); }
   function stateLabel(state) { return state === 'clean' ? 'чиста ядка' : state === 'shelled' ? 'обелени (с черупка)' : 'зелени'; }
   function eventKg(ev) {
     if (ev.lockKg != null) return ev.lockKg; // замразено тегло — не се преизчислява при промяна на кофите
@@ -292,7 +300,7 @@
     var total = 0;
     Object.keys(ev.buckets).forEach(function (bid) {
       var b = bucket(bid); if (!b) return;
-      var w = ev.state === 'clean' ? b.cleanKg : ev.state === 'shelled' ? b.shelledKg : b.greenKg;
+      var w = stateKg(b, ev.state);
       total += (ev.buckets[bid] || 0) * w;
     });
     return total * fill;
@@ -330,13 +338,13 @@
   // еталонна кофа за броене („кофа за сирене“) — спрямо нея се смятат „кофи днес“
   function refBucket() { return bucket('buc_cheese') || (db.settings.buckets && db.settings.buckets[0]); }
   function refBucketKg() {
-    var b = refBucket();
-    return b && b.greenKg ? b.greenKg : 10;
+    var net = bucketNetKg(refBucket(), 'green');
+    return net > 0 ? net : 10;
   }
-  // тегло на 1 обелена (с черупка) еталонна кофа — за него се ползва „С черупка" на кофата за сирене
+  // тегло на 1 обелена (с черупка) еталонна кофа — за него се ползва „С черупка" на кофата за сирене (нето, без кофата)
   function refBucketShelledKg() {
-    var b = refBucket();
-    return b && b.shelledKg ? b.shelledKg : refBucketKg();
+    var net = bucketNetKg(refBucket(), 'shelled');
+    return net > 0 ? net : refBucketKg();
   }
   // колко обелени кофи излизат от 1 зелена кофа по обем (нагласва се в Настройки)
   function shellYield() { var y = db.settings ? db.settings.shellYield : null; return (y != null && y > 0) ? y : 0.5; }
@@ -1402,7 +1410,7 @@
       '</div></details>' +
 
       '<details class="sect"><summary>🪣 Кофи и тегло</summary><div class="sect-body">' +
-      '<p class="muted mb" style="font-size:13px">Колко кг е 1 кофа — зелени / обелени с черупка / чиста ядка. (Обелените с черупка са винаги в кофата от сирене.)' +
+      '<p class="muted mb" style="font-size:13px">Колко кг е 1 кофа — зелени / обелени с черупка / чиста ядка. Пиши теглото както си го измерил (със самата кофа) — приложението само вади теглото на празната кофа. (Обелените с черупка са винаги в кофата от сирене.)' +
       (isAdmin() ? '<br>При промяна на теглото ще те питам дали да преизчисля и старите записи, или да важи само от определена дата.' : '') + '</p>' +
       db.settings.buckets.map(function (b) {
         var head = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
@@ -1412,16 +1420,18 @@
           return '<div class="card">' + head +
             '<div class="kv"><span class="k">Вместимост</span><span class="v">' + (b.liters != null ? b.liters + ' л' : '—') + '</span></div>' +
             '<div class="kv"><span class="k">Празна кофа</span><span class="v">' + (b.tareKg != null ? b.tareKg + ' кг' : '—') + '</span></div>' +
-            '<div class="kv"><span class="k">Зелени</span><span class="v">' + b.greenKg + ' кг</span></div>' +
-            '<div class="kv"><span class="k">С черупка</span><span class="v">' + b.shelledKg + ' кг</span></div>' +
-            '<div class="kv"><span class="k">Чиста ядка</span><span class="v">' + b.cleanKg + ' кг</span></div></div>';
+            '<div class="kv"><span class="k">Зелени (с кофата)</span><span class="v">' + b.greenKg + ' кг</span></div>' +
+            '<div class="kv"><span class="k">С черупка (с кофата)</span><span class="v">' + b.shelledKg + ' кг</span></div>' +
+            '<div class="kv"><span class="k">Чиста ядка (с кофата)</span><span class="v">' + b.cleanKg + ' кг</span></div>' +
+            '<p class="muted" style="font-size:12px;margin:8px 0 0">Нето (без кофата): зелени <b>' + fmtKg(bucketNetKg(b, 'green')) + '</b> · с черупка <b>' + fmtKg(bucketNetKg(b, 'shelled')) + '</b> · чиста <b>' + fmtKg(bucketNetKg(b, 'clean')) + '</b> кг</p></div>';
         }
         return '<div class="card">' + head +
           '<div class="row"><div class="field"><label>Вместимост (литри)</label><input class="input" type="number" value="' + (b.liters != null ? b.liters : '') + '" data-bkg="liters:' + b.id + '"/></div>' +
           '<div class="field"><label>Тегло на празната кофа (кг)</label><input class="input" type="number" step="0.01" min="0" value="' + (b.tareKg != null ? b.tareKg : '') + '" data-bkg="tare:' + b.id + '"/></div></div>' +
-          '<div class="row"><div class="field"><label>Зелени (кг)</label><input class="input" type="number" value="' + b.greenKg + '" data-bkg="green:' + b.id + '"/></div>' +
-          '<div class="field"><label>С черупка</label><input class="input" type="number" value="' + b.shelledKg + '" data-bkg="shelled:' + b.id + '"/></div>' +
-          '<div class="field"><label>Чиста ядка</label><input class="input" type="number" value="' + b.cleanKg + '" data-bkg="clean:' + b.id + '"/></div></div></div>';
+          '<div class="row"><div class="field"><label>Зелени (с кофата)</label><input class="input" type="number" value="' + b.greenKg + '" data-bkg="green:' + b.id + '"/></div>' +
+          '<div class="field"><label>С черупка (с кофата)</label><input class="input" type="number" value="' + b.shelledKg + '" data-bkg="shelled:' + b.id + '"/></div>' +
+          '<div class="field"><label>Чиста ядка (с кофата)</label><input class="input" type="number" value="' + b.cleanKg + '" data-bkg="clean:' + b.id + '"/></div></div>' +
+          '<p class="muted" style="font-size:12px;margin:2px 0 0">Нето (след вадене на кофата): зелени <b>' + fmtKg(bucketNetKg(b, 'green')) + '</b> · с черупка <b>' + fmtKg(bucketNetKg(b, 'shelled')) + '</b> · чиста <b>' + fmtKg(bucketNetKg(b, 'clean')) + '</b> кг</p></div>';
       }).join('') +
       (isAdmin() ? '<button class="btn secondary mb" data-action="savebuckets">💾 Запази теглата на кофите</button>' : '') +
       '</div></details>' +
