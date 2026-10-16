@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.54.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.55.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -309,6 +309,25 @@
     if (!ev.buckets) return 0;
     return Object.keys(ev.buckets).reduce(function (s, k) { return s + (ev.buckets[k] || 0); }, 0);
   }
+  // колко „кофи за сирене" зелено съдържа едно събиране — по ОБЕМ (литри) на всяка кофа поотделно,
+  // за да сметнем обелените (които винаги се мерят в кофи за сирене), независимо в каква кофа е събрано зеленото
+  function greenCheeseBuckets(ev) {
+    if (!ev.buckets) return 0;
+    var ref = refBucket();
+    var cheeseL = (ref && ref.liters > 0) ? ref.liters : 10;
+    var fill = (ev.fill != null ? ev.fill : 100) / 100;
+    var sum = 0;
+    Object.keys(ev.buckets).forEach(function (bid) {
+      var b = bucket(bid); if (!b) return;
+      var L = (b.liters > 0) ? b.liters : cheeseL;
+      sum += (ev.buckets[bid] || 0) * (L / cheeseL);
+    });
+    return sum * fill;
+  }
+  // обелени кг от едно събиране: зелени кофи за сирене × коефициент × „С черупка" на кофата за сирене
+  function eventShelledKg(ev) {
+    return greenCheeseBuckets(ev) * shellYield() * refBucketShelledKg();
+  }
   // „2 × Черна кофа“ (или няколко вида, събрани с +) за показване в дневника
   function eventBucketNames(ev) {
     if (!ev.buckets) return '';
@@ -357,25 +376,25 @@
     return found;
   }
   // обобщава обелените кофи за период: ръчно въведеното за деня надделява над авто-сметката.
-  // авто-сметката е по обем: обелени кофи = зелени кофи × коефициент (shellYield),
-  // а теглото идва от „С черупка" на еталонната кофа (refBucketShelledKg), не от зелените кг.
+  // авто-сметката: за всяка събрана кофа зелено смятаме колко кофи за сирене е по обем (greenCheeseBuckets),
+  // после × коефициент (shellYield) = обелени кофи за сирене; теглото е „С черупка" на кофата за сирене.
   function shelledStats(period) {
     var today = DB.todayISO();
     var days = [];
     var span = period === 'week' ? 7 : period === 'month' ? 30 : 1;
     for (var i = span - 1; i >= 0; i--) { var dd = new Date(); dd.setDate(dd.getDate() - i); days.push(dd.toISOString().slice(0, 10)); }
     if (days.indexOf(today) === -1) days.push(today);
-    var greenByDay = {};
+    var greenBkByDay = {};
     activeEvents().forEach(function (e) {
       if (e.type !== 'harvest_tree' && e.type !== 'harvest_ground') return;
       if (days.indexOf(e.date) === -1) return;
-      greenByDay[e.date] = (greenByDay[e.date] || 0) + eventKg(e);
+      greenBkByDay[e.date] = (greenBkByDay[e.date] || 0) + greenCheeseBuckets(e);
     });
     var buckets = 0, kg = 0, manual = false;
     days.forEach(function (dt) {
       var ov = shellOverrideFor(dt);
       if (ov) { buckets += (ov.buckets || 0); kg += (ov.buckets || 0) * refBucketShelledKg(); manual = true; }
-      else { var shBk = ((greenByDay[dt] || 0) / refBucketKg()) * shellYield(); buckets += shBk; kg += shBk * refBucketShelledKg(); }
+      else { var shBk = (greenBkByDay[dt] || 0) * shellYield(); buckets += shBk; kg += shBk * refBucketShelledKg(); }
     });
     return { buckets: buckets, kg: kg, manual: manual };
   }
@@ -404,16 +423,16 @@
   }
   // общо обелени (с черупка) кг за целия сезон — ръчното за деня надделява над авто-сметката
   function totalShelledKg() {
-    var greenByDay = {}, dates = {};
+    var greenBkByDay = {}, dates = {};
     activeEvents().forEach(function (e) {
-      if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenByDay[e.date] = (greenByDay[e.date] || 0) + eventKg(e); dates[e.date] = 1; }
+      if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenBkByDay[e.date] = (greenBkByDay[e.date] || 0) + greenCheeseBuckets(e); dates[e.date] = 1; }
       else if (e.type === 'shell') dates[e.date] = 1;
     });
     var total = 0;
     Object.keys(dates).forEach(function (dt) {
       var ov = shellOverrideFor(dt);
       if (ov) total += (ov.buckets || 0) * refBucketShelledKg();
-      else total += ((greenByDay[dt] || 0) / refBucketKg()) * shellYield() * refBucketShelledKg();
+      else total += (greenBkByDay[dt] || 0) * shellYield() * refBucketShelledKg();
     });
     return total;
   }
@@ -861,7 +880,7 @@
     var body = topbar('Действия', { back: 'nav:home' }) + '<div class="content">' +
       '<div class="seg seg4" style="margin-bottom:8px">' +
       '<button class="' + (harvestScreen === 'collect' ? 'active' : '') + '" data-action="hscreen:collect">🧺 Събиране</button>' +
-      '<button class="' + (harvestScreen === 'shell' ? 'active' : '') + '" data-action="hscreen:shell">🥥 Обелени</button>' +
+      '<button class="' + (harvestScreen === 'shell' ? 'active' : '') + '" data-action="hscreen:shell">🥥 Белене</button>' +
       '<button class="' + (harvestScreen === 'clean' ? 'active' : '') + '" data-action="hscreen:clean">🌰 Чистене</button>' +
       '<button class="' + (harvestScreen === 'sort' ? 'active' : '') + '" data-action="hscreen:sort">⚪ Сортиране</button>' +
       '</div>' +
@@ -987,10 +1006,10 @@
   // Показва ориентировъчна сметка от зеленото × коефициента, но потребителят въвежда накрая.
   function harvestShellForm() {
     var today = DB.todayISO();
-    var greenToday = activeEvents().filter(function (e) {
+    var greenBkToday = activeEvents().filter(function (e) {
       return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today;
-    }).reduce(function (s, e) { return s + eventKg(e); }, 0);
-    var estBuckets = (greenToday / refBucketKg()) * shellYield();
+    }).reduce(function (s, e) { return s + greenCheeseBuckets(e); }, 0);
+    var estBuckets = greenBkToday * shellYield();
     var ov = shellOverrideFor(today);
     var prefill = ov ? ov.buckets : (estBuckets > 0 ? fmtKg(estBuckets) : '');
     var entries = activeEvents().filter(function (e) { return e.type === 'shell'; })
@@ -1004,12 +1023,12 @@
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени обелени.</p>';
     return '<div class="card" style="margin-top:4px">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Обелена</b> = орех с черупка (след махане на зелената кора). Накрая, като обелиш, въведи колко кофи обелени излязоха.</p>' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Обелена</b> = орех с черупка (след махане на зелената кора). Обелените винаги се мерят в <b>кофи за сирене</b> — независимо в каква кофа е събрано зеленото. Накрая, като обелиш, въведи колко кофи за сирене обелени излязоха.</p>' +
       (estBuckets > 0
-        ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Ориентировъчно за днес: <b>≈ ' + fmtKg(estBuckets) + ' кофи</b> (от зеленото × коефициент ' + fmtKg(shellYield()) + '). Можеш да въведеш друго число.</p>'
+        ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Ориентировъчно за днес: <b>≈ ' + fmtKg(estBuckets) + ' кофи за сирене</b> (от ' + fmtKg(greenBkToday) + ' кофи зелено × коефициент ' + fmtKg(shellYield()) + '). Можеш да въведеш друго число.</p>'
         : '') +
       '<div class="field"><label>Дата</label><input id="shDate" class="input" type="date" value="' + today + '"/></div>' +
-      '<div class="field"><label>Обелени кофи (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
+      '<div class="field"><label>Обелени кофи за сирене (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
       '<button class="btn" data-action="addshell">➕ Запази обелените</button>' +
       '</div>' +
       '<div class="section-title">Записи</div>' +
@@ -1204,20 +1223,18 @@
 
     // добив по етапи за избрания изглед (сезон / месец / седмици)
     var MONTHS_BG = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
-    // зелени кг → обелени кг: по обем (shellYield) към обелени кофи, после по тегло „С черупка"
-    var shKgFactor = (shellYield() * refBucketShelledKg()) / refBucketKg();
     function weekStart(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
     function isoLocal(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
-    var greenVals = [], cleanVals = [], whiteVals = [], blackVals = [], labels = [], periodTitle = '', barActions = null;
+    var greenVals = [], shelledVals = [], cleanVals = [], whiteVals = [], blackVals = [], labels = [], periodTitle = '', barActions = null;
     if (statsMode === 'month') {
       var ref = statsRef || new Date();
       var my = ref.getFullYear(), mm = ref.getMonth();
       var dim = new Date(my, mm + 1, 0).getDate();
-      greenVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0); whiteVals = new Array(dim).fill(0); blackVals = new Array(dim).fill(0);
+      greenVals = new Array(dim).fill(0); shelledVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0); whiteVals = new Array(dim).fill(0); blackVals = new Array(dim).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date); if (d.getFullYear() !== my || d.getMonth() !== mm) return;
         var i = d.getDate() - 1;
-        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[i] += eventKg(e);
+        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenVals[i] += eventKg(e); shelledVals[i] += eventShelledKg(e); }
         else if (e.type === 'clean') cleanVals[i] += (e.kg || 0);
         else if (e.type === 'sort') { whiteVals[i] += (e.whiteKg || 0); blackVals[i] += (e.blackKg || 0); }
       });
@@ -1227,10 +1244,10 @@
       var end = statsRef || new Date();
       var weeks = [], ws = weekStart(end);
       for (var i = 7; i >= 0; i--) { var s = new Date(ws); s.setDate(s.getDate() - i * 7); weeks.push(s); }
-      greenVals = new Array(8).fill(0); cleanVals = new Array(8).fill(0); whiteVals = new Array(8).fill(0); blackVals = new Array(8).fill(0);
+      greenVals = new Array(8).fill(0); shelledVals = new Array(8).fill(0); cleanVals = new Array(8).fill(0); whiteVals = new Array(8).fill(0); blackVals = new Array(8).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date + 'T00:00:00');
-        for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
+        for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenVals[j] += eventKg(e); shelledVals[j] += eventShelledKg(e); } else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
       });
       labels = weeks.map(function (s) { return s.getDate() + '.' + (s.getMonth() + 1); });
       barActions = weeks.map(function (s) { return 'statsweek:' + isoLocal(s); }); // натисни седмица → нейните дни
@@ -1241,32 +1258,32 @@
       var dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
       var days7 = [];
       for (var i = 0; i < 7; i++) { var dd = new Date(mon); dd.setDate(dd.getDate() + i); days7.push(dd); }
-      greenVals = new Array(7).fill(0); cleanVals = new Array(7).fill(0); whiteVals = new Array(7).fill(0); blackVals = new Array(7).fill(0);
+      greenVals = new Array(7).fill(0); shelledVals = new Array(7).fill(0); cleanVals = new Array(7).fill(0); whiteVals = new Array(7).fill(0); blackVals = new Array(7).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date + 'T00:00:00');
-        for (var j = 0; j < 7; j++) { if (d.getFullYear() === days7[j].getFullYear() && d.getMonth() === days7[j].getMonth() && d.getDate() === days7[j].getDate()) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
+        for (var j = 0; j < 7; j++) { if (d.getFullYear() === days7[j].getFullYear() && d.getMonth() === days7[j].getMonth() && d.getDate() === days7[j].getDate()) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { greenVals[j] += eventKg(e); shelledVals[j] += eventShelledKg(e); } else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
       });
       labels = days7.map(function (d, i) { return dayNames[i] + ' ' + d.getDate(); });
       periodTitle = 'Седмица ' + days7[0].getDate() + '.' + (days7[0].getMonth() + 1) + ' – ' + days7[6].getDate() + '.' + (days7[6].getMonth() + 1);
     } else {
       var seasonMonths = [7, 8, 9, 10, 11];
       labels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
-      var gM = new Array(12).fill(0), cM = new Array(12).fill(0), wM = new Array(12).fill(0), bM = new Array(12).fill(0);
+      var gM = new Array(12).fill(0), shM = new Array(12).fill(0), cM = new Array(12).fill(0), wM = new Array(12).fill(0), bM = new Array(12).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date); if (d.getFullYear() !== year) return;
-        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') gM[d.getMonth()] += eventKg(e);
+        if (e.type === 'harvest_tree' || e.type === 'harvest_ground') { gM[d.getMonth()] += eventKg(e); shM[d.getMonth()] += eventShelledKg(e); }
         else if (e.type === 'clean') cM[d.getMonth()] += (e.kg || 0);
         else if (e.type === 'sort') { wM[d.getMonth()] += (e.whiteKg || 0); bM[d.getMonth()] += (e.blackKg || 0); }
       });
       whiteVals = seasonMonths.map(function (m) { return wM[m]; });
       blackVals = seasonMonths.map(function (m) { return bM[m]; });
       greenVals = seasonMonths.map(function (m) { return gM[m]; });
+      shelledVals = seasonMonths.map(function (m) { return shM[m]; });
       cleanVals = seasonMonths.map(function (m) { return cM[m]; });
       periodTitle = 'Сезон ' + year;
     }
-    var shelledVals = greenVals.map(function (v) { return v * shKgFactor; });
+    var shelledTot = shelledVals.reduce(function (a, b) { return a + b; }, 0);
     var greenTot = greenVals.reduce(function (a, b) { return a + b; }, 0);
-    var shelledTot = greenTot * shKgFactor;
     var cleanTot = cleanVals.reduce(function (a, b) { return a + b; }, 0);
     var whiteTot = whiteVals.reduce(function (a, b) { return a + b; }, 0);
     var blackTot = blackVals.reduce(function (a, b) { return a + b; }, 0);
@@ -1817,7 +1834,9 @@
     var shelledKg = sh.kg;
     var today = DB.todayISO();
     var todayOv = shellOverrideFor(today);
-    var todayAuto = (harvestStats('today').kg / refBucketKg()) * shellYield();
+    var todayAuto = activeEvents().filter(function (e) {
+      return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today;
+    }).reduce(function (s, e) { return s + greenCheeseBuckets(e); }, 0) * shellYield();
     var prefill = todayOv ? todayOv.buckets : fmtKg(todayAuto);
     openSheet('<h3>Събрано ' + when + '</h3>' +
       '<p class="muted mb" style="font-size:13px">🟢 Зелени: <b>' + fmtKg(greenBk) + ' кофи</b> (≈ ' + fmtKg(hv.kg) + ' кг)<br>' +
