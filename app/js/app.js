@@ -4,12 +4,12 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.49.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.49.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
   var harvestMode = 'tree';
-  var harvestScreen = 'collect'; // кой таб на екрана Събиране: 'collect' | 'clean' | 'sort'
+  var harvestScreen = 'none'; // кой таб на екрана Действия: 'none' | 'collect' | 'clean' | 'sort'
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
@@ -433,6 +433,7 @@
   function go(name, param) {
     if (route.name === 'walk' && name !== 'walk') stopWalk();
     if (name !== 'home' && mapSelected.length) clearMapSelect();
+    if (name === 'harvest') harvestScreen = 'none'; // екран „Действия“ се отваря без избран таб
     route = { name: name, param: param || null };
     // добавя запис в историята, за да работи бутонът „назад“ / суайп жестът на iPhone вътре в приложението
     try { history.pushState({ route: route }, '', '#' + name + (param ? '/' + encodeURIComponent(param) : '')); } catch (err) {}
@@ -867,6 +868,7 @@
 
     if (harvestScreen === 'clean') { return body + harvestCleanForm() + '</div>'; }
     if (harvestScreen === 'sort') { return body + harvestSortForm() + '</div>'; }
+    if (harvestScreen !== 'collect') { return body + '<p class="muted center" style="padding:24px 8px">Избери действие отгоре.</p>' + '</div>'; }
 
     var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; });
     var todayKg = todayEvs.reduce(function (s, e) { return s + eventKg(e); }, 0);
