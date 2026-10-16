@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.56.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.56.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -492,7 +492,7 @@
   // =======================================================================
   function render() {
     var app = el('app');
-    if (!db.currentUserId) { app.className = 'app'; app.innerHTML = viewLogin(); bind(); return; }
+    if (!db.currentUserId) { app.className = 'app'; app.innerHTML = viewLogin(); _lastHTML = ''; bind(); return; }
     app.className = 'app';
     // нормализирай непознат/начален маршрут към „home“, за да работят коректно картата и бутоните
     var known = ['home', 'tree', 'harvest', 'care', 'log', 'stats', 'sales', 'buyer', 'settings', 'walk'];
@@ -511,11 +511,17 @@
       case 'walk': body = viewWalk(); break;
       default: body = viewHome();
     }
-    app.innerHTML = body + bottomNav();
+    var html = body + bottomNav();
+    // ако резултатът е същият (напр. облачна синхронизация без реална промяна),
+    // не пипаме DOM — иначе числата „премигват" без причина при зареждане
+    if (html === _lastHTML && app.childNodes.length) return;
+    _lastHTML = html;
+    app.innerHTML = html;
     bind();
     if (route.name === 'walk') startWalk();
     if (route.name === 'home') { initMapSelect(); renderMapBar(); initStatSwipe(); }
   }
+  var _lastHTML = '';
 
   // =======================================================================
   //  ОБЛАЧНА СИНХРОНИЗАЦИЯ
