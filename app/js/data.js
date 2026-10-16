@@ -151,7 +151,17 @@
   }
 
   function save(db) {
-    try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch (e) {}
+    try { localStorage.setItem(DB_KEY, JSON.stringify(db)); return; }
+    catch (e) {}
+    // Хранилището е пълно (обикновено от снимките в base64). Пазим всичко БЕЗ снимките,
+    // за да не остане локалното копие остаряло — иначе числата „премигват" при всяко
+    // зареждане (старо локално → после свежо от облака). Снимките и бездруго са в облака.
+    try {
+      var lite = {};
+      for (var k in db) if (k !== 'photos') lite[k] = db[k];
+      lite.photos = [];
+      localStorage.setItem(DB_KEY, JSON.stringify(lite));
+    } catch (e2) {}
   }
 
   function reset() {
