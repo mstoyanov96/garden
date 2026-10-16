@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.56.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.56.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -547,15 +547,26 @@
   // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
   function applyCloudSnapshot(cloud) {
     var keepUser = db.currentUserId;
-    ['trees', 'events', 'buyers', 'sales', 'users', 'photos'].forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
+    var cols = ['trees', 'events', 'buyers', 'sales', 'users', 'photos'];
+    // сравняваме без значение на реда — Firestore връща документите разбъркани,
+    // за да не прерисуваме (и да „премигват" числата), ако всъщност нищо не се е сменило
+    var changed = false;
+    cols.forEach(function (c) { if (cloud[c] && colSig(cloud[c]) !== colSig(db[c])) changed = true; });
+    if (cloud.settings && jsonSig(cloud.settings) !== jsonSig(db.settings)) changed = true;
+    cols.forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
     if (cloud.settings) db.settings = cloud.settings;
     db.currentUserId = keepUser;
     var fixed = normalizeZones();
     DB.migratePhotos(db);
     DB.save(db);
     if (fixed && window.Sync) window.Sync.push();
-    render();
+    if (changed || fixed) render();
   }
+  // подпис на колекция, нечувствителен към реда на записите
+  function colSig(arr) {
+    return (arr || []).map(function (it) { return (it && it.id ? it.id + ':' : '') + jsonSig(it); }).sort().join('|');
+  }
+  function jsonSig(o) { try { return JSON.stringify(o); } catch (e) { return ''; } }
   function startSync() {
     if (!window.Sync) return;
     window.Sync.init({
