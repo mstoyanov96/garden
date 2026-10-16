@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.56.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.56.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1219,6 +1219,11 @@
   //  STATS
   // =======================================================================
   function viewStats() {
+    // в статистиката закръгляме до 2 знака след запетаята
+    function fmtKg(n) {
+      n = Math.round(((n || 0) + Number.EPSILON) * 100) / 100;
+      return n.toFixed(2).replace(/\.?0+$/, '');
+    }
     var year = db.settings.seasonYear;
     var harv = activeEvents().filter(function (e) { return e.type === 'harvest_tree' || e.type === 'harvest_ground'; });
     var totalKg = harv.reduce(function (s, e) { return s + eventKg(e); }, 0);
