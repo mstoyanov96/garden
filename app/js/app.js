@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.47.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.47.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -621,6 +621,10 @@
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
       periodPill(statPeriod) +
       '</span><span class="ar">›</span></div>' +
+      '<div class="row mb">' +
+      '<button class="btn secondary" data-action="nav:harvest">🧺 Събиране</button>' +
+      '<button class="btn secondary" data-action="kernel">🌰 Чистене / сортиране</button>' +
+      '</div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + periodLong(statPeriod) +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
 
@@ -655,13 +659,10 @@
       '<div class="section-title">Бързи действия</div>' +
       '<div class="row mb">' +
       '<button class="btn secondary" data-action="nav:harvest">🧺 Събиране</button>' +
-      '<button class="btn secondary" data-action="kernel">🌰 Чистене / сортиране</button>' +
-      '</div>' +
-      '<div class="row mb">' +
       '<button class="btn secondary" data-action="care:fertilize">🌱 Торене</button>' +
-      '<button class="btn secondary" data-action="care:water">💧 Поливане</button>' +
       '</div>' +
       '<div class="row">' +
+      '<button class="btn secondary" data-action="care:water">💧 Поливане</button>' +
       '<button class="btn secondary" data-action="care:mow">🌾 Косене</button>' +
       '</div>' +
       '</div>';
