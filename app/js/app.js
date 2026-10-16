@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.49.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.50.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -655,15 +655,6 @@
           '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
           '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span></div>') +
 
-      '<div class="section-title">Бързи действия</div>' +
-      '<div class="row mb">' +
-      '<button class="btn secondary" data-action="nav:harvest">🧺 Събиране</button>' +
-      '<button class="btn secondary" data-action="care:fertilize">🌱 Торене</button>' +
-      '</div>' +
-      '<div class="row">' +
-      '<button class="btn secondary" data-action="care:water">💧 Поливане</button>' +
-      '<button class="btn secondary" data-action="care:mow">🌾 Косене</button>' +
-      '</div>' +
       '</div>';
   }
 
@@ -859,15 +850,23 @@
   function viewHarvest() {
     var today = DB.todayISO();
 
-    var body = topbar('Събиране и обработка', { back: 'nav:home' }) + '<div class="content">' +
-      '<div class="seg seg3">' +
+    var body = topbar('Действия', { back: 'nav:home' }) + '<div class="content">' +
+      '<div class="seg seg3" style="margin-bottom:8px">' +
       '<button class="' + (harvestScreen === 'collect' ? 'active' : '') + '" data-action="hscreen:collect">🧺 Събиране</button>' +
       '<button class="' + (harvestScreen === 'clean' ? 'active' : '') + '" data-action="hscreen:clean">🌰 Чистене</button>' +
       '<button class="' + (harvestScreen === 'sort' ? 'active' : '') + '" data-action="hscreen:sort">⚪ Сортиране</button>' +
+      '</div>' +
+      '<div class="seg seg3">' +
+      '<button class="' + (harvestScreen === 'fertilize' ? 'active' : '') + '" data-action="hscreen:fertilize">🌱 Торене</button>' +
+      '<button class="' + (harvestScreen === 'water' ? 'active' : '') + '" data-action="hscreen:water">💧 Поливане</button>' +
+      '<button class="' + (harvestScreen === 'mow' ? 'active' : '') + '" data-action="hscreen:mow">🌾 Косене</button>' +
       '</div>';
 
     if (harvestScreen === 'clean') { return body + harvestCleanForm() + '</div>'; }
     if (harvestScreen === 'sort') { return body + harvestSortForm() + '</div>'; }
+    if (harvestScreen === 'fertilize' || harvestScreen === 'water' || harvestScreen === 'mow') {
+      return body + careBody(today) + '</div>';
+    }
     if (harvestScreen !== 'collect') { return body + '<p class="muted center" style="padding:24px 8px">Избери действие отгоре.</p>' + '</div>'; }
 
     var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; });
@@ -1003,6 +1002,19 @@
   var careTab = 'fertilize';
   function viewCare() {
     var today = DB.todayISO();
+    var body = topbar('Грижа за градината', { back: 'nav:home' }) + '<div class="content">' +
+      '<div class="seg">' +
+      '<button class="' + (careTab === 'fertilize' ? 'active' : '') + '" data-action="ctab:fertilize">🌱 Торене</button>' +
+      '<button class="' + (careTab === 'water' ? 'active' : '') + '" data-action="ctab:water">💧 Поливане</button>' +
+      '<button class="' + (careTab === 'mow' ? 'active' : '') + '" data-action="ctab:mow">🌾 Косене</button>' +
+      '</div>';
+    body += careBody(today);
+    body += '</div>';
+    return body;
+  }
+
+  // тялото на грижата (обхват + форма) — ползва се и в „Грижа“, и в таб „Действия“
+  function careBody(today) {
     var activeTrees = db.trees.filter(function (t) { return !t.deletedAt; });
     var treeOpts = activeTrees
       .map(function (t) { return '<option value="' + t.id + '"' + (t.id === careTreePreset ? ' selected' : '') + '>Дърво ' + esc(t.code) + '</option>'; }).join('');
@@ -1016,13 +1028,7 @@
     if (careTab === 'mow' && careScope === 'tree') careScope = 'all';
     if (careScope === 'trees' && !careTrees.length) careScope = 'all';
 
-    var body = topbar('Грижа за градината', { back: 'nav:home' }) + '<div class="content">' +
-      '<div class="seg">' +
-      '<button class="' + (careTab === 'fertilize' ? 'active' : '') + '" data-action="ctab:fertilize">🌱 Торене</button>' +
-      '<button class="' + (careTab === 'water' ? 'active' : '') + '" data-action="ctab:water">💧 Поливане</button>' +
-      '<button class="' + (careTab === 'mow' ? 'active' : '') + '" data-action="ctab:mow">🌾 Косене</button>' +
-      '</div>';
-
+    var body = '';
     // --- избор на обхват: цялата градина / редици / едно дърво / избрани от картата ---
     if (careScope === 'trees') {
       var selNames = careTrees.map(function (id) { var t = tree(id); return t ? t.code : null; }).filter(Boolean);
@@ -1071,7 +1077,6 @@
         '<div class="field"><label>Бележка</label><textarea id="cnote" class="input" placeholder="напр. окосена цялата градина"></textarea></div>' +
         '<button class="btn" data-action="savecare:mow">💾 Запази косене</button></div>';
     }
-    body += '</div>';
     return body;
   }
 
@@ -2019,7 +2024,11 @@
       case 'savecare': saveCare(parts[1]); break;
 
       case 'hmode': harvestMode = parts[1]; render(); break;
-      case 'hscreen': harvestScreen = parts[1]; render(); break;
+      case 'hscreen': {
+        harvestScreen = parts[1];
+        if (parts[1] === 'fertilize' || parts[1] === 'water' || parts[1] === 'mow') { careTab = parts[1]; careScope = 'all'; careTreePreset = ''; }
+        render(); break;
+      }
       case 'groundquick': showGroundHarvest(); break;
       case 'savegroundquick': saveGroundQuick(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
