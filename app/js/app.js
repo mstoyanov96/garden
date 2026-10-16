@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.45.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.46.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -308,6 +308,19 @@
       return fmtKg(ev.buckets[bid]) + ' × ' + (b ? b.name : 'кофа');
     }).join(' + ');
   }
+  // малка картинка/емотиконка на кофа за вграждане в текст (дневник)
+  function bucketThumb(b) {
+    var src = (b && b.photo) || (b && BUCKET_IMG[b.id]);
+    return src ? '<img class="bkthumb" src="' + src + '" alt=""/>' : '🪣';
+  }
+  // същото като eventBucketNames, но с картинки на кофите — за дневника
+  function eventBucketNamesHtml(ev) {
+    if (!ev.buckets) return '';
+    return Object.keys(ev.buckets).filter(function (bid) { return ev.buckets[bid]; }).map(function (bid) {
+      var b = bucket(bid);
+      return '<span class="bkchip">' + bucketThumb(b) + fmtKg(ev.buckets[bid]) + ' × ' + (b ? esc(b.name) : 'кофа') + '</span>';
+    }).join(' + ');
+  }
   // показва килограми с до 3 десетични знака, без излишни нули (напр. 3.75, 10, 0.5)
   function fmtKg(n) {
     n = Math.round(((n || 0) + Number.EPSILON) * 1000) / 1000;
@@ -363,6 +376,15 @@
     if (s && s.yieldInputKg > 0 && s.yieldOutputKg > 0) return s.yieldOutputKg / s.yieldInputKg;
     return 0.48;
   }
+  // каква част от изчистената ядка е бяла (останалото е черна) — въведено в екрана за изчистване.
+  // връща null, ако още не е въведено.
+  function whitePct() {
+    var s = db.settings;
+    if (!s) return null;
+    var w = s.whiteKg, k = s.blackKg;
+    if ((w > 0 || k > 0)) { var tot = (w || 0) + (k || 0); return tot > 0 ? (w || 0) / tot : null; }
+    return null;
+  }
   // общо обелени (с черупка) кг за целия сезон — ръчното за деня надделява над авто-сметката
   function totalShelledKg() {
     var greenByDay = {}, dates = {};
@@ -384,7 +406,13 @@
     var expected = shelledKg * kernelYield();
     var actual = 0;
     activeEvents().forEach(function (e) { if (e.type === 'clean') actual += (e.kg || 0); });
-    return { expected: expected, actual: actual, remaining: Math.max(0, expected - actual) };
+    var wp = whitePct();
+    return {
+      expected: expected, actual: actual, remaining: Math.max(0, expected - actual),
+      whitePct: wp,
+      expectedWhite: wp != null ? expected * wp : null,
+      actualWhite: wp != null ? actual * wp : null
+    };
   }
   // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
   function bucketsEq(kg) { return (kg || 0) / refBucketKg(); }
@@ -998,7 +1026,7 @@
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
-    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBucketNames(e) + (e.fill != null && e.fill !== 100 ? ' (' + e.fill + '% пълни)' : '') + ' · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBucketNamesHtml(e) + ' · ' + (e.fill != null ? e.fill : 100) + '% пълни · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
     else if (e.type === 'shell') detail = fmtKg(e.buckets) + ' обелени кофи · ≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг';
     else if (e.type === 'clean') detail = fmtKg(e.kg) + ' кг чиста ядка';
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
@@ -1149,6 +1177,9 @@
       '<div class="kernelcard" data-action="kernel">' +
       '<div class="kernelhead"><span>Изчистено / очаквано</span><b>' + fmtKg(ks.actual) + ' / ' + fmtKg(ks.expected) + ' кг</b></div>' +
       '<div class="kprog"><div class="kprog-fill" style="width:' + kpct + '%"></div></div>' +
+      (ks.whitePct != null
+        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.actualWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
+        : '') +
       '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
@@ -1934,6 +1965,7 @@
       case 'clearshelled': clearShelledToday(); break;
       case 'kernel': showKernel(); break;
       case 'addclean': addCleanEntry(); break;
+      case 'savewhiteblack': saveWhiteBlack(); break;
 
       case 'varnew': sheetVarietyNew(); break;
       case 'varedit': sheetVarietyEdit(parts[1]); break;
@@ -2497,7 +2529,19 @@
       '<div class="kv"><span class="k">Очаквано</span><span class="v"><b>' + fmtKg(ks.expected) + ' кг</b></span></div>' +
       '<div class="kv"><span class="k">Изчистено досега</span><span class="v"><b>' + fmtKg(ks.actual) + ' кг</b></span></div>' +
       '<div class="kv"><span class="k">Остават</span><span class="v"><b>' + fmtKg(ks.remaining) + ' кг</b></span></div>' +
+      (ks.whitePct != null
+        ? '<div class="kv"><span class="k">⚪ Бели ядки (' + Math.round(ks.whitePct * 100) + '%)</span><span class="v"><b>' + fmtKg(ks.actualWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></span></div>'
+        : '') +
       '<div class="kprog" style="margin-top:10px"><div class="kprog-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>' +
+      '<div class="section-title">⚪ Бели / ⚫ Черни ядки</div>' +
+      '<div class="card">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">От 1 кофа с начупени орехи — колко излизат бели и колко черни ядки. От тях се смята процентът бели. Може да се въведе отново (презаписва се).</p>' +
+      '<div class="row">' +
+      '<div class="field"><label>⚪ Бели ядки</label><input id="whiteKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.whiteKg != null ? db.settings.whiteKg : '') + '"/></div>' +
+      '<div class="field"><label>⚫ Черни ядки</label><input id="blackKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.blackKg != null ? db.settings.blackKg : '') + '"/></div></div>' +
+      '<div class="kv"><span class="k">Бели ядки</span><span class="v"><b>' + (ks.whitePct != null ? Math.round(ks.whitePct * 100) + '%' : '—') + '</b></span></div>' +
+      '<button class="btn secondary" data-action="savewhiteblack">💾 Запази процента бели</button>' +
       '</div>' +
       '<div class="section-title">Добави изчистени</div>' +
       '<div class="card">' +
@@ -2514,6 +2558,17 @@
     if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
     addEvent({ type: 'clean', date: DB.todayISO(), kg: v });
     render(); showKernel();
+  }
+  // запазва колко бели и колко черни ядки излизат от 1 кофа начупени (презаписва се)
+  function saveWhiteBlack() {
+    var w = parseFloat(el('whiteKg').value);
+    var k = parseFloat(el('blackKg').value);
+    if (!(w >= 0)) w = 0;
+    if (!(k >= 0)) k = 0;
+    if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
+    db.settings.whiteKg = w;
+    db.settings.blackKg = k;
+    save(); render(); showKernel();
   }
 
   function saveSale() {

@@ -185,6 +185,9 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .kernelhead b{font-size:18px;white-space:nowrap;}
 .kprog{height:14px;border-radius:8px;background:var(--green-soft);overflow:hidden;}
 .kprog-fill{height:100%;background:linear-gradient(90deg,#8b63d6,#6a3fc0);border-radius:8px;transition:width .3s;}
+.kernelwhite{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px;font-weight:700;color:var(--green-dark);}
+.kernelwhite b{margin-left:auto;white-space:nowrap;}
+.kernelwhite span{background:var(--green-soft);color:var(--green-dark);font-size:12px;padding:2px 9px;border-radius:999px;}
 .kernelsub{font-size:13px;color:var(--muted);margin-top:9px;}
 /* банер при маркирани дървета на картата */
 .hl-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
@@ -353,6 +356,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .list-row .tx{flex:1;}
 .list-row .tx b{font-size:15px;}
 .list-row .tx small{display:block;color:var(--muted);font-size:12px;}
+.bkchip{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
+.bkthumb{width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:1px;}
 .list-row .reacts{margin-top:6px;}
 .heartbtn{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:15px;line-height:1;cursor:pointer;}
 .heartbtn.on{background:#fdeaea;border-color:#f3c9c6;}
@@ -377,7 +382,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bars.withval{margin-top:16px;}
 .bars .b .bval{position:absolute;top:-15px;left:-6px;right:-6px;text-align:center;font-size:10px;font-weight:800;color:var(--green-dark);white-space:nowrap;}
 .bars.manyvals{margin-top:30px;}
-.bars.manyvals .b .bval{top:auto;bottom:100%;left:50%;right:auto;transform:translateX(-50%) rotate(-90deg);transform-origin:bottom center;font-size:9px;margin-bottom:2px;}
+.bars.manyvals .b .bval{top:auto;bottom:calc(100% + 2px);left:50%;right:auto;transform:translateX(-50%);writing-mode:vertical-rl;line-height:1;font-size:9px;margin-bottom:0;}
 .bars .b[role=button]{cursor:pointer;}
 .bars .b[role=button]:active{filter:brightness(1.1);}
 .stagehead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px;}
