@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.50.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.51.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -851,8 +851,9 @@
     var today = DB.todayISO();
 
     var body = topbar('Действия', { back: 'nav:home' }) + '<div class="content">' +
-      '<div class="seg seg3" style="margin-bottom:8px">' +
+      '<div class="seg seg4" style="margin-bottom:8px">' +
       '<button class="' + (harvestScreen === 'collect' ? 'active' : '') + '" data-action="hscreen:collect">🧺 Събиране</button>' +
+      '<button class="' + (harvestScreen === 'shell' ? 'active' : '') + '" data-action="hscreen:shell">🥥 Обелени</button>' +
       '<button class="' + (harvestScreen === 'clean' ? 'active' : '') + '" data-action="hscreen:clean">🌰 Чистене</button>' +
       '<button class="' + (harvestScreen === 'sort' ? 'active' : '') + '" data-action="hscreen:sort">⚪ Сортиране</button>' +
       '</div>' +
@@ -862,6 +863,7 @@
       '<button class="' + (harvestScreen === 'mow' ? 'active' : '') + '" data-action="hscreen:mow">🌾 Косене</button>' +
       '</div>';
 
+    if (harvestScreen === 'shell') { return body + harvestShellForm() + '</div>'; }
     if (harvestScreen === 'clean') { return body + harvestCleanForm() + '</div>'; }
     if (harvestScreen === 'sort') { return body + harvestSortForm() + '</div>'; }
     if (harvestScreen === 'fertilize' || harvestScreen === 'water' || harvestScreen === 'mow') {
@@ -964,6 +966,39 @@
       '</div>' +
       '<div class="section-title">Записи</div>' +
       '<div class="card">' + sortList + '</div>';
+  }
+
+  // таб „Обелени" на екрана Действия: въвеждане на обелени кофи (с черупка) за дата.
+  // Показва ориентировъчна сметка от зеленото × коефициента, но потребителят въвежда накрая.
+  function harvestShellForm() {
+    var today = DB.todayISO();
+    var greenToday = activeEvents().filter(function (e) {
+      return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today;
+    }).reduce(function (s, e) { return s + eventKg(e); }, 0);
+    var estBuckets = (greenToday / refBucketKg()) * shellYield();
+    var ov = shellOverrideFor(today);
+    var prefill = ov ? ov.buckets : (estBuckets > 0 ? fmtKg(estBuckets) : '');
+    var entries = activeEvents().filter(function (e) { return e.type === 'shell'; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
+    var list = entries.length ? entries.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      return '<div class="list-row"><div class="ic harvest">🥥</div>' +
+        '<div class="tx"><b>' + fmtKg(e.buckets) + ' кофи</b><small>≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг обелени' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) +
+        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="muted">Още няма въведени обелени.</p>';
+    return '<div class="card" style="margin-top:4px">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Обелена</b> = орех с черупка (след махане на зелената кора). Накрая, като обелиш, въведи колко кофи обелени излязоха.</p>' +
+      (estBuckets > 0
+        ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Ориентировъчно за днес: <b>≈ ' + fmtKg(estBuckets) + ' кофи</b> (от зеленото × коефициент ' + fmtKg(shellYield()) + '). Можеш да въведеш друго число.</p>'
+        : '') +
+      '<div class="field"><label>Дата</label><input id="shDate" class="input" type="date" value="' + today + '"/></div>' +
+      '<div class="field"><label>Обелени кофи (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
+      '<button class="btn" data-action="addshell">➕ Запази обелените</button>' +
+      '</div>' +
+      '<div class="section-title">Записи</div>' +
+      '<div class="card">' + list + '</div>';
   }
 
   function counterRow(key, title, sub, val) {
@@ -2071,6 +2106,7 @@
       case 'clearshelled': clearShelledToday(); break;
       case 'kernel': showKernel(); break;
       case 'addclean': addCleanEntry(); break;
+      case 'addshell': addShellEntry(); break;
       case 'addsort': addSortEntry(); break;
       case 'savewhiteblack': saveWhiteBlack(); break;
 
@@ -2692,6 +2728,17 @@
     if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
     var date = (el('clDate') && el('clDate').value) || DB.todayISO();
     addEvent({ type: 'clean', date: date, kg: v });
+    render();
+  }
+  // обелени (с черупка): записва реално обелените кофи за дата (надделява над авто-сметката)
+  function addShellEntry() {
+    var v = parseFloat(el('shBuckets').value);
+    if (!(v > 0)) { alert('Въведи кофи по-голямо от 0.'); return; }
+    var date = (el('shDate') && el('shDate').value) || DB.todayISO();
+    var ex = null;
+    db.events.forEach(function (e) { if (!e.deletedAt && e.type === 'shell' && e.date === date) ex = e; });
+    if (ex) { ex.buckets = v; ex.createdAt = Date.now(); ex.createdBy = db.currentUserId; save(); }
+    else addEvent({ type: 'shell', date: date, buckets: v });
     render();
   }
   // сортиране (4-ти процес): записва реално бели и черни ядки за дадена дата
