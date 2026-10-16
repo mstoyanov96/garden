@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.48.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.49.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -558,7 +558,7 @@
   function bottomNav() {
     var items = [
       { k: 'home', ic: '🗺️', t: 'Градина' },
-      { k: 'harvest', ic: '🧺', t: 'Събиране' },
+      { k: 'harvest', ic: '🧺', t: 'Действия' },
       { k: 'sales', ic: '💰', t: 'Клиенти' },
       { k: 'stats', ic: '📊', t: 'Статистика' },
       { k: 'log', ic: '📜', t: 'Дневник' }
@@ -639,7 +639,8 @@
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
         (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
         '</div>') +
-      (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button></div>') +
+      (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button>' +
+        '<button class="btn sm secondary" data-action="groundquick">🍂 Събери от земята</button></div>') +
       '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode, mapMode) + '</div>' +
       (mapMode === 'harvest'
         ? '<div class="legend">' +
@@ -929,9 +930,9 @@
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
     return '<div class="card" style="margin-top:4px">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">Въведи колко кг чиста (изчистена) ядка изчисти за дадения ден.</p>' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Изчистена</b> = ядката без черупката (след като се счупи обеленият орех с черупка). Въведи колко кг чиста ядка изчисти за деня.</p>' +
       '<div class="field"><label>Дата</label><input id="clDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="field"><label>Колко кг изчистена ядка</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<div class="field"><label>Колко кг изчистена ядка (без черупка)</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
       '<button class="btn" data-action="addclean">➕ Запази изчистеното</button>' +
       '</div>' +
       '<div class="section-title">Записи</div>' +
@@ -953,7 +954,7 @@
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
     return '<div class="card" style="margin-top:4px">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">От изчистените ядки колко излязоха <b>бели</b> и колко <b>черни</b> за дадения ден.</p>' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Сортирана</b> = изчистената ядка (без черупка), разделена на <b>бяла</b> и <b>черна</b>. Въведи колко кг от всяка за деня.</p>' +
       '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
       '<div class="row">' +
       '<div class="field"><label>⚪ Бели ядки (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
@@ -2017,6 +2018,8 @@
 
       case 'hmode': harvestMode = parts[1]; render(); break;
       case 'hscreen': harvestScreen = parts[1]; render(); break;
+      case 'groundquick': showGroundHarvest(); break;
+      case 'savegroundquick': saveGroundQuick(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
@@ -2449,6 +2452,33 @@
     harvestDraft = {};
     if (saved) { alert('Записано! ' + saved + ' вписвания.'); go('home'); }
     else alert('Добави поне 1 кофа.');
+  }
+
+  // компактен лист за бързо събиране от земята (от екрана Градина)
+  function showGroundHarvest() {
+    var opts = db.settings.buckets.map(function (b) {
+      return '<option value="' + b.id + '">' + esc(b.name) + ' (1 кофа ≈ ' + fmtKg(stateKg(b, 'green')) + ' кг)</option>';
+    }).join('');
+    openSheet('<h3>🍂 Събиране от земята</h3>' +
+      '<p class="muted mb" style="font-size:13px">Бързо впиши колко кофи зелени орехи събра от земята.</p>' +
+      '<div class="field"><label>Коя кофа?</label><select id="gBucket" class="input">' + opts + '</select></div>' +
+      '<div class="field"><label>Дата</label><input id="gDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>Колко кофи?</label><input id="gCount" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="1"/></div>' +
+      '<div class="field"><label>Колко пълни? (%)</label><input id="gFill" class="input" type="number" step="5" min="5" max="100" value="100"/></div>' +
+      '</div>' +
+      '<button class="btn mt" data-action="savegroundquick">💾 Запази</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+  function saveGroundQuick() {
+    var bid = el('gBucket').value;
+    var cnt = parseFloat(el('gCount').value);
+    var fill = parseFloat(el('gFill').value) || 100;
+    var date = (el('gDate') && el('gDate').value) || DB.todayISO();
+    if (!(cnt > 0)) { alert('Въведи поне 1 кофа.'); return; }
+    var buckets = {}; buckets[bid] = cnt;
+    addEvent({ type: 'harvest_ground', date: date, state: 'green', buckets: buckets, fill: fill });
+    closeSheet(); render();
   }
 
   function saveTreeHarvestInline(id) {
