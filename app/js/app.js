@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.55.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.56.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -13,6 +13,8 @@
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
+  var groundBucket = '';     // избрана кофа при бързо събиране от земята
+  var groundFill = 100;       // колко пълни са кофите (%) при събиране от земята
   var harvestState = 'green'; // в какъв вид са кофите: 'green' зелени | 'shelled' обелени с черупка | 'clean' чиста ядка
   var treeHarvestOpen = '';   // id на дърво с отворена вградена форма за събиране
   var treeDetailsOpen = false; // показани ли са подробните данни за дървото
@@ -166,15 +168,16 @@
     var cutoff = today;
     if (period === 'week') { var d = new Date(); d.setDate(d.getDate() - 6); cutoff = d.toISOString().slice(0, 10); }
     else if (period === 'month') { var dm = new Date(); dm.setDate(dm.getDate() - 29); cutoff = dm.toISOString().slice(0, 10); }
-    var perTree = {}, groundKg = 0, totalKg = 0;
+    var perTree = {}, perTreeBk = {}, groundKg = 0, groundBk = 0, totalKg = 0, totalBk = 0;
     activeEvents().forEach(function (e) {
       if (e.type !== 'harvest_tree' && e.type !== 'harvest_ground') return;
       if (e.date < cutoff || e.date > today) return;
       var k = eventKg(e); totalKg += k;
-      if (e.type === 'harvest_tree' && e.treeId) perTree[e.treeId] = (perTree[e.treeId] || 0) + k;
-      else groundKg += k;
+      var bk = greenCheeseBuckets(e); totalBk += bk;
+      if (e.type === 'harvest_tree' && e.treeId) { perTree[e.treeId] = (perTree[e.treeId] || 0) + k; perTreeBk[e.treeId] = (perTreeBk[e.treeId] || 0) + bk; }
+      else { groundKg += k; groundBk += bk; }
     });
-    return { kg: totalKg, perTree: perTree, groundKg: groundKg };
+    return { kg: totalKg, buckets: totalBk, perTree: perTree, perTreeBk: perTreeBk, groundKg: groundKg, groundBk: groundBk };
   }
 
   // ---- GPS helpers -------------------------------------------------------
@@ -637,7 +640,7 @@
       if (harvestedToday(t.id)) doneToday++;
     });
 
-    var greenBk = bucketsEq(hv.kg);
+    var greenBk = hv.buckets;
     var sh = shelledStats(statPeriod);
     var shelledBk = sh.buckets;
     var shelledKg = sh.kg;
@@ -900,6 +903,7 @@
 
     var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; });
     var todayKg = todayEvs.reduce(function (s, e) { return s + eventKg(e); }, 0);
+    var todayBk = todayEvs.reduce(function (s, e) { return s + greenCheeseBuckets(e); }, 0);
 
     body += '<div class="seg">' +
       '<button class="' + (harvestMode === 'tree' ? 'active' : '') + '" data-action="hmode:tree">🌳 От дърветата</button>' +
@@ -940,7 +944,7 @@
 
     body += '<div class="card mt">' +
       '<small class="muted">Днес събрано общо</small><div style="font-size:20px;font-weight:800">' +
-      fmtKg(todayKg) + ' кг · ' + fmtKg(bucketsEq(todayKg)) + ' кофи</div></div>';
+      fmtKg(todayKg) + ' кг · ' + fmtKg(todayBk) + ' кофи</div></div>';
 
     body += '<button class="btn mt" data-action="savehcurrent">💾 Запази събраното</button>';
     body += '</div>';
@@ -1818,17 +1822,17 @@
     var when = periodLong(statPeriod);
     harvestHL = hv.perTree; // маркирай дърветата на картата
     render();               // прерисувай картата с подчертаването
-    var ranked = Object.keys(hv.perTree).map(function (id) { return { t: tree(id), kg: hv.perTree[id] }; })
+    var ranked = Object.keys(hv.perTree).map(function (id) { return { t: tree(id), kg: hv.perTree[id], bk: hv.perTreeBk[id] || 0 }; })
       .filter(function (r) { return r.t; }).sort(function (a, b) { return b.kg - a.kg; });
     var list = ranked.length ? ranked.map(function (r) {
       return '<div class="list-row"><div class="ic harvest">🌳</div>' +
-        '<div class="tx"><b>Дърво ' + esc(r.t.code) + '</b><small>' + fmtKg(bucketsEq(r.kg)) + ' кофи</small></div>' +
+        '<div class="tx"><b>Дърво ' + esc(r.t.code) + '</b><small>' + fmtKg(r.bk) + ' кофи</small></div>' +
         '<div class="meta"><b>' + fmtKg(r.kg) + ' кг</b></div></div>';
     }).join('') : '<p class="muted">Няма събрано от дървета за този период.</p>';
     var ground = hv.groundKg > 0 ? '<div class="list-row"><div class="ic harvest">🍂</div>' +
-      '<div class="tx"><b>От земята (зелени)</b><small>не е вързано към дърво</small></div>' +
+      '<div class="tx"><b>От земята (зелени)</b><small>' + fmtKg(hv.groundBk) + ' кофи</small></div>' +
       '<div class="meta"><b>' + fmtKg(hv.groundKg) + ' кг</b></div></div>' : '';
-    var greenBk = bucketsEq(hv.kg);
+    var greenBk = hv.buckets;
     var sh = shelledStats(statPeriod);
     var shelledBk = sh.buckets;
     var shelledKg = sh.kg;
@@ -2108,6 +2112,9 @@
       }
       case 'groundquick': showGroundHarvest(); break;
       case 'savegroundquick': saveGroundQuick(); break;
+      case 'gbuck': groundBucket = parts[1]; showGroundHarvest(); break;
+      case 'gfill': groundFill = parseInt(parts[1], 10) || 100; showGroundHarvest(); break;
+      case 'gfillstep': groundFill = Math.max(5, Math.min(100, groundFill + (parseInt(parts[1], 10) || 0))); showGroundHarvest(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
@@ -2545,24 +2552,40 @@
 
   // компактен лист за бързо събиране от земята (от екрана Градина)
   function showGroundHarvest() {
-    var opts = db.settings.buckets.map(function (b) {
-      return '<option value="' + b.id + '">' + esc(b.name) + ' (1 кофа ≈ ' + fmtKg(stateKg(b, 'green')) + ' кг)</option>';
+    if (!groundBucket || !bucket(groundBucket)) groundBucket = db.settings.buckets[0].id;
+    var curCount = (el('gCount') && el('gCount').value) || '1';
+    var curDate = (el('gDate') && el('gDate').value) || DB.todayISO();
+    var pics = db.settings.buckets.map(function (b) {
+      return '<button class="bpick' + (b.id === groundBucket ? ' active' : '') + '" data-action="gbuck:' + b.id + '">' +
+        '<span class="bpic">' + bucketIcon(b) + '</span>' +
+        '<b>' + esc(b.name) + '</b><small>1 кофа ≈ ' + fmtKg(stateKg(b, 'green')) + ' кг</small></button>';
     }).join('');
+    var fb = bucket(groundBucket);
+    var oneKg = fb ? stateKg(fb, 'green') * groundFill / 100 : 0;
     openSheet('<h3>🍂 Събиране от земята</h3>' +
       '<p class="muted mb" style="font-size:13px">Бързо впиши колко кофи зелени орехи събра от земята.</p>' +
-      '<div class="field"><label>Коя кофа?</label><select id="gBucket" class="input">' + opts + '</select></div>' +
-      '<div class="field"><label>Дата</label><input id="gDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="row">' +
-      '<div class="field"><label>Колко кофи?</label><input id="gCount" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="1"/></div>' +
-      '<div class="field"><label>Колко пълни? (%)</label><input id="gFill" class="input" type="number" step="5" min="5" max="100" value="100"/></div>' +
+      '<div class="field"><label>Коя кофа?</label><div class="bucketpick">' + pics + '</div></div>' +
+      '<div class="field"><label>Дата</label><input id="gDate" class="input" type="date" value="' + curDate + '"/></div>' +
+      '<div class="field"><label>Колко кофи?</label><input id="gCount" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + curCount + '"/></div>' +
+      '<div class="field"><label>Колко пълни бяха кофите?</label>' +
+      '<div class="rowfilter">' +
+      [100, 75, 50, 25, 10, 5].map(function (p) {
+        return '<button class="' + (groundFill === p ? 'active' : '') + '" data-action="gfill:' + p + '">' + (p === 100 ? 'Пълна' : p + '%') + '</button>';
+      }).join('') + '</div>' +
+      '<div class="fillstep">' +
+      '<button class="fillstep-btn" data-action="gfillstep:-5"><span>−</span><small>5%</small></button>' +
+      '<span class="fillstep-val">' + groundFill + '%</span>' +
+      '<button class="fillstep-btn" data-action="gfillstep:5"><span>+</span><small>5%</small></button>' +
+      '</div>' +
+      (fb ? '<small class="muted fillhint">1 ' + esc(fb.name) + (groundFill !== 100 ? ' на ' + groundFill + '%' : '') + ' ≈ <b>' + fmtKg(oneKg) + ' кг</b></small>' : '') +
       '</div>' +
       '<button class="btn mt" data-action="savegroundquick">💾 Запази</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
   function saveGroundQuick() {
-    var bid = el('gBucket').value;
+    var bid = (groundBucket && bucket(groundBucket)) ? groundBucket : db.settings.buckets[0].id;
     var cnt = parseFloat(el('gCount').value);
-    var fill = parseFloat(el('gFill').value) || 100;
+    var fill = groundFill;
     var date = (el('gDate') && el('gDate').value) || DB.todayISO();
     if (!(cnt > 0)) { alert('Въведи поне 1 кофа.'); return; }
     var buckets = {}; buckets[bid] = cnt;
