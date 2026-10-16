@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.46.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.47.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -376,9 +376,17 @@
     if (s && s.yieldInputKg > 0 && s.yieldOutputKg > 0) return s.yieldOutputKg / s.yieldInputKg;
     return 0.48;
   }
-  // каква част от изчистената ядка е бяла (останалото е черна) — въведено в екрана за изчистване.
-  // връща null, ако още не е въведено.
+  // сортиране (4-ти процес): сумира реално сортираните бели и черни ядки за сезона
+  function sortStats() {
+    var white = 0, black = 0;
+    activeEvents().forEach(function (e) { if (e.type === 'sort') { white += (e.whiteKg || 0); black += (e.blackKg || 0); } });
+    return { white: white, black: black, total: white + black };
+  }
+  // какъв дял от изчистената ядка е бяла. Приоритет: реалното сортиране; иначе калибровката „средно от 1 кофа".
+  // връща null, ако още нищо не е въведено.
   function whitePct() {
+    var ss = sortStats();
+    if (ss.total > 0) return ss.white / ss.total;
     var s = db.settings;
     if (!s) return null;
     var w = s.whiteKg, k = s.blackKg;
@@ -407,11 +415,12 @@
     var actual = 0;
     activeEvents().forEach(function (e) { if (e.type === 'clean') actual += (e.kg || 0); });
     var wp = whitePct();
+    var ss = sortStats();
     return {
       expected: expected, actual: actual, remaining: Math.max(0, expected - actual),
       whitePct: wp,
       expectedWhite: wp != null ? expected * wp : null,
-      actualWhite: wp != null ? actual * wp : null
+      sortedWhite: ss.white, sortedBlack: ss.black, sortedTotal: ss.total
     };
   }
   // колко пълни еталонни кофи се падат за дадено тегло (2 кофи = реално напълнени, не просто въведени)
@@ -1015,6 +1024,7 @@
       harvest_ground: { ic: '🍂', cls: 'harvest', t: 'Събиране (земя)' },
       shell: { ic: '🥥', cls: 'harvest', t: 'Обелени (ръчно)' },
       clean: { ic: '🌰', cls: 'harvest', t: 'Изчистена ядка' },
+      sort: { ic: '⚪', cls: 'harvest', t: 'Сортиране (бели/черни)' },
       mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
       photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
       tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
@@ -1029,6 +1039,7 @@
     if (e.type === 'harvest_tree' || e.type === 'harvest_ground') detail = eventBucketNamesHtml(e) + ' · ' + (e.fill != null ? e.fill : 100) + '% пълни · ' + fmtKg(eventKg(e)) + ' кг' + (e.state && e.state !== 'green' ? ' · ' + stateLabel(e.state) : '');
     else if (e.type === 'shell') detail = fmtKg(e.buckets) + ' обелени кофи · ≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг';
     else if (e.type === 'clean') detail = fmtKg(e.kg) + ' кг чиста ядка';
+    else if (e.type === 'sort') { var st = (e.whiteKg || 0) + (e.blackKg || 0); detail = '⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг' + (st > 0 ? ' · ' + Math.round((e.whiteKg || 0) / st * 100) + '% бели' : ''); }
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
@@ -1080,17 +1091,18 @@
     var shKgFactor = (shellYield() * refBucketShelledKg()) / refBucketKg();
     function weekStart(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
     function isoLocal(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
-    var greenVals = [], cleanVals = [], labels = [], periodTitle = '', barActions = null;
+    var greenVals = [], cleanVals = [], whiteVals = [], blackVals = [], labels = [], periodTitle = '', barActions = null;
     if (statsMode === 'month') {
       var ref = statsRef || new Date();
       var my = ref.getFullYear(), mm = ref.getMonth();
       var dim = new Date(my, mm + 1, 0).getDate();
-      greenVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0);
+      greenVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0); whiteVals = new Array(dim).fill(0); blackVals = new Array(dim).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date); if (d.getFullYear() !== my || d.getMonth() !== mm) return;
         var i = d.getDate() - 1;
         if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[i] += eventKg(e);
         else if (e.type === 'clean') cleanVals[i] += (e.kg || 0);
+        else if (e.type === 'sort') { whiteVals[i] += (e.whiteKg || 0); blackVals[i] += (e.blackKg || 0); }
       });
       labels = greenVals.map(function (_, i) { var dn = i + 1; return (dn === 1 || dn % 5 === 0) ? String(dn) : ''; });
       periodTitle = MONTHS_BG[mm] + ' ' + my;
@@ -1098,10 +1110,10 @@
       var end = statsRef || new Date();
       var weeks = [], ws = weekStart(end);
       for (var i = 7; i >= 0; i--) { var s = new Date(ws); s.setDate(s.getDate() - i * 7); weeks.push(s); }
-      greenVals = new Array(8).fill(0); cleanVals = new Array(8).fill(0);
+      greenVals = new Array(8).fill(0); cleanVals = new Array(8).fill(0); whiteVals = new Array(8).fill(0); blackVals = new Array(8).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date + 'T00:00:00');
-        for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); break; } }
+        for (var j = 0; j < 8; j++) { var a = weeks[j], b = new Date(weeks[j]); b.setDate(b.getDate() + 7); if (d >= a && d < b) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
       });
       labels = weeks.map(function (s) { return s.getDate() + '.' + (s.getMonth() + 1); });
       barActions = weeks.map(function (s) { return 'statsweek:' + isoLocal(s); }); // натисни седмица → нейните дни
@@ -1112,22 +1124,25 @@
       var dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
       var days7 = [];
       for (var i = 0; i < 7; i++) { var dd = new Date(mon); dd.setDate(dd.getDate() + i); days7.push(dd); }
-      greenVals = new Array(7).fill(0); cleanVals = new Array(7).fill(0);
+      greenVals = new Array(7).fill(0); cleanVals = new Array(7).fill(0); whiteVals = new Array(7).fill(0); blackVals = new Array(7).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date + 'T00:00:00');
-        for (var j = 0; j < 7; j++) { if (d.getFullYear() === days7[j].getFullYear() && d.getMonth() === days7[j].getMonth() && d.getDate() === days7[j].getDate()) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); break; } }
+        for (var j = 0; j < 7; j++) { if (d.getFullYear() === days7[j].getFullYear() && d.getMonth() === days7[j].getMonth() && d.getDate() === days7[j].getDate()) { if (e.type === 'harvest_tree' || e.type === 'harvest_ground') greenVals[j] += eventKg(e); else if (e.type === 'clean') cleanVals[j] += (e.kg || 0); else if (e.type === 'sort') { whiteVals[j] += (e.whiteKg || 0); blackVals[j] += (e.blackKg || 0); } break; } }
       });
       labels = days7.map(function (d, i) { return dayNames[i] + ' ' + d.getDate(); });
       periodTitle = 'Седмица ' + days7[0].getDate() + '.' + (days7[0].getMonth() + 1) + ' – ' + days7[6].getDate() + '.' + (days7[6].getMonth() + 1);
     } else {
       var seasonMonths = [7, 8, 9, 10, 11];
       labels = ['Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
-      var gM = new Array(12).fill(0), cM = new Array(12).fill(0);
+      var gM = new Array(12).fill(0), cM = new Array(12).fill(0), wM = new Array(12).fill(0), bM = new Array(12).fill(0);
       activeEvents().forEach(function (e) {
         var d = new Date(e.date); if (d.getFullYear() !== year) return;
         if (e.type === 'harvest_tree' || e.type === 'harvest_ground') gM[d.getMonth()] += eventKg(e);
         else if (e.type === 'clean') cM[d.getMonth()] += (e.kg || 0);
+        else if (e.type === 'sort') { wM[d.getMonth()] += (e.whiteKg || 0); bM[d.getMonth()] += (e.blackKg || 0); }
       });
+      whiteVals = seasonMonths.map(function (m) { return wM[m]; });
+      blackVals = seasonMonths.map(function (m) { return bM[m]; });
       greenVals = seasonMonths.map(function (m) { return gM[m]; });
       cleanVals = seasonMonths.map(function (m) { return cM[m]; });
       periodTitle = 'Сезон ' + year;
@@ -1136,8 +1151,12 @@
     var greenTot = greenVals.reduce(function (a, b) { return a + b; }, 0);
     var shelledTot = greenTot * shKgFactor;
     var cleanTot = cleanVals.reduce(function (a, b) { return a + b; }, 0);
+    var whiteTot = whiteVals.reduce(function (a, b) { return a + b; }, 0);
+    var blackTot = blackVals.reduce(function (a, b) { return a + b; }, 0);
+    var sortedTot = whiteTot + blackTot;
     var pctShelled = greenTot > 0 ? Math.round(shelledTot / greenTot * 100) : 0;
     var pctClean = shelledTot > 0 ? Math.round(cleanTot / shelledTot * 100) : 0;
+    var pctWhite = sortedTot > 0 ? Math.round(whiteTot / sortedTot * 100) : 0;
     var showBarVals = true;
     var manyBars = labels.length > 9; // при месец (28–31 стълба) въртим числата вертикално да се берат
     // една стъпаловидна диаграма за даден етап
@@ -1178,7 +1197,7 @@
       '<div class="kernelhead"><span>Изчистено / очаквано</span><b>' + fmtKg(ks.actual) + ' / ' + fmtKg(ks.expected) + ' кг</b></div>' +
       '<div class="kprog"><div class="kprog-fill" style="width:' + kpct + '%"></div></div>' +
       (ks.whitePct != null
-        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.actualWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
+        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
         : '') +
       '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
@@ -1195,6 +1214,8 @@
       stageChart('🟢', 'Зелени (кг)', 'greenbars', greenVals, greenTot, null, '') +
       stageChart('🥥', 'Обелени (кг)', 'shelledbars', shelledVals, shelledTot, pctShelled, 'зелените') +
       stageChart('🌰', 'Изчистени (кг)', 'cleanbars', cleanVals, cleanTot, pctClean, 'обелените') +
+      stageChart('⚪', 'Сортиране — бели (кг)', 'whitebars', whiteVals, whiteTot, (sortedTot > 0 ? pctWhite : null), 'сортираните') +
+      (sortedTot > 0 ? '<div class="card" style="margin-top:-6px"><div class="kv"><span class="k">⚪ Бели</span><span class="v"><b>' + fmtKg(whiteTot) + ' кг</b></span></div><div class="kv"><span class="k">⚫ Черни</span><span class="v"><b>' + fmtKg(blackTot) + ' кг</b></span></div></div>' : '') +
 
       '<div class="section-title">Най-доходоносни дървета</div>' +
       '<div class="card">' + (ranked.length ? ranked.map(function (r) {
@@ -1965,6 +1986,7 @@
       case 'clearshelled': clearShelledToday(); break;
       case 'kernel': showKernel(); break;
       case 'addclean': addCleanEntry(); break;
+      case 'addsort': addSortEntry(); break;
       case 'savewhiteblack': saveWhiteBlack(); break;
 
       case 'varnew': sheetVarietyNew(); break;
@@ -2523,6 +2545,18 @@
         (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
+    var sortEntries = activeEvents().filter(function (e) { return e.type === 'sort'; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
+    var sortList = sortEntries.length ? sortEntries.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      var tot = (e.whiteKg || 0) + (e.blackKg || 0);
+      var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
+      return '<div class="list-row"><div class="ic harvest">⚪</div>' +
+        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) +
+        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="muted">Още няма сортирани.</p>';
     openSheet('<h3>🌰 Изчистена ядка (рандеман)</h3>' +
       '<p class="muted mb" style="font-size:13px">Очакваното се смята от събраните обелени (с черупка) × рандеман <b>' + Math.round(kernelYield() * 100) + '%</b> (от калкулатора в Настройки).</p>' +
       '<div class="card">' +
@@ -2530,18 +2564,9 @@
       '<div class="kv"><span class="k">Изчистено досега</span><span class="v"><b>' + fmtKg(ks.actual) + ' кг</b></span></div>' +
       '<div class="kv"><span class="k">Остават</span><span class="v"><b>' + fmtKg(ks.remaining) + ' кг</b></span></div>' +
       (ks.whitePct != null
-        ? '<div class="kv"><span class="k">⚪ Бели ядки (' + Math.round(ks.whitePct * 100) + '%)</span><span class="v"><b>' + fmtKg(ks.actualWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></span></div>'
+        ? '<div class="kv"><span class="k">⚪ Бели ядки (' + Math.round(ks.whitePct * 100) + '%)</span><span class="v"><b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></span></div>'
         : '') +
       '<div class="kprog" style="margin-top:10px"><div class="kprog-fill" style="width:' + pct + '%"></div></div>' +
-      '</div>' +
-      '<div class="section-title">⚪ Бели / ⚫ Черни ядки</div>' +
-      '<div class="card">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">От 1 кофа с начупени орехи — колко излизат бели и колко черни ядки. От тях се смята процентът бели. Може да се въведе отново (презаписва се).</p>' +
-      '<div class="row">' +
-      '<div class="field"><label>⚪ Бели ядки</label><input id="whiteKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.whiteKg != null ? db.settings.whiteKg : '') + '"/></div>' +
-      '<div class="field"><label>⚫ Черни ядки</label><input id="blackKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.blackKg != null ? db.settings.blackKg : '') + '"/></div></div>' +
-      '<div class="kv"><span class="k">Бели ядки</span><span class="v"><b>' + (ks.whitePct != null ? Math.round(ks.whitePct * 100) + '%' : '—') + '</b></span></div>' +
-      '<button class="btn secondary" data-action="savewhiteblack">💾 Запази процента бели</button>' +
       '</div>' +
       '<div class="section-title">Добави изчистени</div>' +
       '<div class="card">' +
@@ -2549,14 +2574,43 @@
       '<div class="field"><label>Колко кг изчистена ядка добавяш</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
       '<button class="btn secondary" data-action="addclean">➕ Добави към изчистените</button>' +
       '</div>' +
-      '<div class="section-title">Въведени досега</div>' +
       '<div class="card">' + list + '</div>' +
+      '<div class="section-title">⚖️ Сортиране — бели / черни</div>' +
+      '<div class="card">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">4-ти процес. От изчистените ядки колко излязоха <b>бели</b> и колко <b>черни</b> за даден ден (напр. за седмицата). Процентът бели се смята от реално сортираното.</p>' +
+      '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>⚪ Бели ядки (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<div class="field"><label>⚫ Черни ядки (кг)</label><input id="sortBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div></div>' +
+      '<button class="btn secondary" data-action="addsort">➕ Добави сортирани</button>' +
+      '</div>' +
+      '<div class="card">' + sortList + '</div>' +
+      '<div class="section-title">⚪ Среден дял бели (калибровка)</div>' +
+      '<div class="card">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">Ако още няма сортиране, тук задаваш очаквания дял: от 1 кофа начупени — колко излизат бели и колко черни. Служи само за „очаквано бели" (презаписва се).</p>' +
+      '<div class="row">' +
+      '<div class="field"><label>⚪ Бели ядки</label><input id="whiteKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.whiteKg != null ? db.settings.whiteKg : '') + '"/></div>' +
+      '<div class="field"><label>⚫ Черни ядки</label><input id="blackKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + (db.settings.blackKg != null ? db.settings.blackKg : '') + '"/></div></div>' +
+      '<div class="kv"><span class="k">Дял бели</span><span class="v"><b>' + ((db.settings.whiteKg > 0 || db.settings.blackKg > 0) ? Math.round((db.settings.whiteKg || 0) / ((db.settings.whiteKg || 0) + (db.settings.blackKg || 0)) * 100) + '%' : '—') + '</b></span></div>' +
+      '<button class="btn secondary" data-action="savewhiteblack">💾 Запази дела</button>' +
+      '</div>' +
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
   function addCleanEntry() {
     var v = parseFloat(el('clKg').value);
     if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
     addEvent({ type: 'clean', date: DB.todayISO(), kg: v });
+    render(); showKernel();
+  }
+  // сортиране (4-ти процес): записва реално бели и черни ядки за дадена дата
+  function addSortEntry() {
+    var w = parseFloat(el('sortWhite').value);
+    var k = parseFloat(el('sortBlack').value);
+    if (!(w >= 0)) w = 0;
+    if (!(k >= 0)) k = 0;
+    if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
+    var date = (el('sortDate') && el('sortDate').value) || DB.todayISO();
+    addEvent({ type: 'sort', date: date, whiteKg: w, blackKg: k });
     render(); showKernel();
   }
   // запазва колко бели и колко черни ядки излизат от 1 кофа начупени (презаписва се)

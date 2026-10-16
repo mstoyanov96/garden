@@ -379,6 +379,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bars.greenbars .b{background:linear-gradient(180deg,#34a85a,#1f7a43);}
 .bars.shelledbars .b{background:linear-gradient(180deg,#f3a65b,#e07e2c);}
 .bars.cleanbars .b{background:linear-gradient(180deg,#8b63d6,#6a3fc0);}
+.bars.whitebars .b{background:linear-gradient(180deg,#e9edf2,#c3ccd6);}
 .bars.withval{margin-top:16px;}
 .bars .b .bval{position:absolute;top:-15px;left:-6px;right:-6px;text-align:center;font-size:10px;font-weight:800;color:var(--green-dark);white-space:nowrap;}
 .bars.manyvals{margin-top:30px;}
