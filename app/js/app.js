@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.52.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.53.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -932,10 +932,17 @@
         (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
+    var bucketOpts = '<option value="">— без кофа (само ядка) —</option>' +
+      db.settings.buckets.map(function (b) {
+        return '<option value="' + b.id + '">' + esc(b.name) + ' (кофа ' + (b.tareKg != null ? fmtKg(b.tareKg) + ' кг' : 'тара 0') + ')</option>';
+      }).join('');
     return '<div class="card" style="margin-top:4px">' +
       '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Изчистена</b> = ядката без черупката (след като се счупи обеленият орех с черупка). Въведи колко кг чиста ядка изчисти за деня.</p>' +
       '<div class="field"><label>Дата</label><input id="clDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="field"><label>Колко кг изчистена ядка (без черупка)</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<div class="field"><label>Измерено тегло (кг)</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<div class="field"><label>Теглил си с кофа? (ще се извади теглото ѝ)</label><select id="clBucket" class="input">' + bucketOpts + '</select></div>' +
+      '<div class="field"><label>Колко такива кофи</label><input id="clCount" class="input" type="number" step="1" min="1" value="1" inputmode="numeric"/></div>' +
+      '<p class="muted" id="clNet" style="font-size:13px;margin:0 0 8px"></p>' +
       '<button class="btn" data-action="addclean">➕ Запази изчистеното</button>' +
       '</div>' +
       '<div class="section-title">Записи</div>' +
@@ -1959,12 +1966,16 @@
   document.addEventListener('input', function (e) {
     var inp = e.target;
     if (!inp || !inp.getAttribute) return;
+    if (inp.id === 'clKg' || inp.id === 'clCount') { updateCleanNet(); return; }
     var key = inp.getAttribute('data-count');
     if (key == null) return;
     var v = parseFloat(String(inp.value).replace(',', '.'));
     if (!isFinite(v) || v < 0) v = 0;
     harvestDraft[key] = harvestDraft[key] || { _count: 0 };
     harvestDraft[key]._count = v;
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'clBucket') updateCleanNet();
   });
 
   document.addEventListener('click', function (e) {
@@ -2728,11 +2739,31 @@
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
   function addCleanEntry() {
-    var v = parseFloat(el('clKg').value);
-    if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
+    var gross = parseFloat(el('clKg').value);
+    if (!(gross > 0)) { alert('Въведи тегло по-голямо от 0.'); return; }
+    var net = cleanNetKg();
+    if (!(net > 0)) { alert('След вадене на кофите остава 0 кг. Провери теглото и броя кофи.'); return; }
     var date = (el('clDate') && el('clDate').value) || DB.todayISO();
-    addEvent({ type: 'clean', date: date, kg: v });
+    addEvent({ type: 'clean', date: date, kg: net });
     render();
+  }
+  // пресмята нетна чиста ядка: измерено тегло − (тара на избраната кофа × брой кофи)
+  function cleanNetKg() {
+    var gross = parseFloat((el('clKg') || {}).value) || 0;
+    var sel = el('clBucket');
+    var bid = sel ? sel.value : '';
+    var cnt = parseFloat((el('clCount') || {}).value) || 1;
+    var b = bid ? bucket(bid) : null;
+    var tare = b ? (b.tareKg || 0) * cnt : 0;
+    var net = gross - tare;
+    return net > 0 ? net : 0;
+  }
+  function updateCleanNet() {
+    var out = el('clNet'); if (!out) return;
+    var sel = el('clBucket');
+    var bid = sel ? sel.value : '';
+    if (!bid) { out.innerHTML = ''; return; }
+    out.innerHTML = 'Чиста ядка (без кофата): <b>' + fmtKg(cleanNetKg()) + ' кг</b>';
   }
   // обелени (с черупка): записва реално обелените кофи за дата (надделява над авто-сметката)
   function addShellEntry() {
