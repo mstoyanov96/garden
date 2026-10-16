@@ -4,11 +4,12 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.47.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.48.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
   var harvestMode = 'tree';
+  var harvestScreen = 'collect'; // кой таб на екрана Събиране: 'collect' | 'clean' | 'sort'
   var harvestRowFilter = ''; // филтър по ред на картата при събиране
   var harvestBucket = '';    // избрана кофа при събиране
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
@@ -621,10 +622,6 @@
       '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
       periodPill(statPeriod) +
       '</span><span class="ar">›</span></div>' +
-      '<div class="row mb">' +
-      '<button class="btn secondary" data-action="nav:harvest">🧺 Събиране</button>' +
-      '<button class="btn secondary" data-action="kernel">🌰 Чистене / сортиране</button>' +
-      '</div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + periodLong(statPeriod) +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
 
@@ -859,11 +856,21 @@
   // =======================================================================
   function viewHarvest() {
     var today = DB.todayISO();
+
+    var body = topbar('Събиране и обработка', { back: 'nav:home' }) + '<div class="content">' +
+      '<div class="seg seg3">' +
+      '<button class="' + (harvestScreen === 'collect' ? 'active' : '') + '" data-action="hscreen:collect">🧺 Събиране</button>' +
+      '<button class="' + (harvestScreen === 'clean' ? 'active' : '') + '" data-action="hscreen:clean">🌰 Чистене</button>' +
+      '<button class="' + (harvestScreen === 'sort' ? 'active' : '') + '" data-action="hscreen:sort">⚪ Сортиране</button>' +
+      '</div>';
+
+    if (harvestScreen === 'clean') { return body + harvestCleanForm() + '</div>'; }
+    if (harvestScreen === 'sort') { return body + harvestSortForm() + '</div>'; }
+
     var todayEvs = activeEvents().filter(function (e) { return (e.type === 'harvest_tree' || e.type === 'harvest_ground') && e.date === today; });
     var todayKg = todayEvs.reduce(function (s, e) { return s + eventKg(e); }, 0);
 
-    var body = topbar('Събиране на орехи', { back: 'nav:home' }) + '<div class="content">' +
-      '<div class="seg">' +
+    body += '<div class="seg">' +
       '<button class="' + (harvestMode === 'tree' ? 'active' : '') + '" data-action="hmode:tree">🌳 От дърветата</button>' +
       '<button class="' + (harvestMode === 'ground' ? 'active' : '') + '" data-action="hmode:ground">🍂 От земята</button>' +
       '</div>';
@@ -907,6 +914,54 @@
     body += '<button class="btn mt" data-action="savehcurrent">💾 Запази събраното</button>';
     body += '</div>';
     return body;
+  }
+
+  // таб „Чистене" на екрана Събиране: само попълване на изчистена ядка (без рандеман)
+  function harvestCleanForm() {
+    var entries = activeEvents().filter(function (e) { return e.type === 'clean'; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
+    var list = entries.length ? entries.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      return '<div class="list-row"><div class="ic harvest">🌰</div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) +
+        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
+    return '<div class="card" style="margin-top:4px">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">Въведи колко кг чиста (изчистена) ядка изчисти за дадения ден.</p>' +
+      '<div class="field"><label>Дата</label><input id="clDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
+      '<div class="field"><label>Колко кг изчистена ядка</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<button class="btn" data-action="addclean">➕ Запази изчистеното</button>' +
+      '</div>' +
+      '<div class="section-title">Записи</div>' +
+      '<div class="card">' + list + '</div>';
+  }
+
+  // таб „Сортиране" на екрана Събиране: попълване на бели/черни ядки за дата (без рандеман)
+  function harvestSortForm() {
+    var sortEntries = activeEvents().filter(function (e) { return e.type === 'sort'; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
+    var sortList = sortEntries.length ? sortEntries.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      var tot = (e.whiteKg || 0) + (e.blackKg || 0);
+      var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
+      return '<div class="list-row"><div class="ic harvest">⚪</div>' +
+        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) +
+        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="muted">Още няма сортирани.</p>';
+    return '<div class="card" style="margin-top:4px">' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">От изчистените ядки колко излязоха <b>бели</b> и колко <b>черни</b> за дадения ден.</p>' +
+      '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>⚪ Бели ядки (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
+      '<div class="field"><label>⚫ Черни ядки (кг)</label><input id="sortBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div></div>' +
+      '<button class="btn" data-action="addsort">➕ Запази сортираното</button>' +
+      '</div>' +
+      '<div class="section-title">Записи</div>' +
+      '<div class="card">' + sortList + '</div>';
   }
 
   function counterRow(key, title, sub, val) {
@@ -1961,6 +2016,7 @@
       case 'savecare': saveCare(parts[1]); break;
 
       case 'hmode': harvestMode = parts[1]; render(); break;
+      case 'hscreen': harvestScreen = parts[1]; render(); break;
       case 'hrow': harvestRowFilter = parts[1] || ''; render(); break;
       case 'hbuck': harvestBucket = parts[1]; render(); break;
       case 'hfill': harvestFill = parseInt(parts[1], 10) || 100; render(); break;
@@ -2583,30 +2639,19 @@
         : '') +
       '<div class="kprog" style="margin-top:10px"><div class="kprog-fill" style="width:' + pct + '%"></div></div>' +
       '</div>' +
-      '<div class="section-title">Добави изчистени</div>' +
-      '<div class="card">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">Като изчистиш още, въведи колко кг чиста ядка добавяш. Бройката „изчистено" расте и остатъкът намалява.</p>' +
-      '<div class="field"><label>Колко кг изчистена ядка добавяш</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
-      '<button class="btn secondary" data-action="addclean">➕ Добави към изчистените</button>' +
-      '</div>' +
+      '<p class="muted" style="font-size:12px;margin:4px 2px 0">За въвеждане на изчистени и сортирани иди на „🧺 Събиране".</p>' +
+      '<div class="section-title">🌰 Изчистени записи</div>' +
       '<div class="card">' + list + '</div>' +
-      '<div class="section-title">⚖️ Сортиране — бели / черни</div>' +
-      '<div class="card">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px">4-ти процес. От изчистените ядки колко излязоха <b>бели</b> и колко <b>черни</b> за даден ден (напр. за седмицата). Процентът бели се смята от реално сортираното.</p>' +
-      '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="row">' +
-      '<div class="field"><label>⚪ Бели ядки (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
-      '<div class="field"><label>⚫ Черни ядки (кг)</label><input id="sortBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div></div>' +
-      '<button class="btn secondary" data-action="addsort">➕ Добави сортирани</button>' +
-      '</div>' +
+      '<div class="section-title">⚪ Сортирани записи</div>' +
       '<div class="card">' + sortList + '</div>' +
       '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
   }
   function addCleanEntry() {
     var v = parseFloat(el('clKg').value);
     if (!(v > 0)) { alert('Въведи кг по-голямо от 0.'); return; }
-    addEvent({ type: 'clean', date: DB.todayISO(), kg: v });
-    render(); showKernel();
+    var date = (el('clDate') && el('clDate').value) || DB.todayISO();
+    addEvent({ type: 'clean', date: date, kg: v });
+    render();
   }
   // сортиране (4-ти процес): записва реално бели и черни ядки за дадена дата
   function addSortEntry() {
@@ -2617,7 +2662,7 @@
     if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
     var date = (el('sortDate') && el('sortDate').value) || DB.todayISO();
     addEvent({ type: 'sort', date: date, whiteKg: w, blackKg: k });
-    render(); showKernel();
+    render();
   }
   // запазва колко бели и колко черни ядки излизат от 1 кофа начупени (презаписва се)
   function saveWhiteBlack() {

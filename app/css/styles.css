@@ -145,6 +145,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .seg{display:flex;background:#eef1ee;border-radius:14px;padding:5px;gap:5px;margin-bottom:16px;}
 .seg button{flex:1;height:44px;border-radius:10px;font-weight:700;color:var(--green-dark);font-size:15px;background:var(--card);box-shadow:var(--shadow);}
 .seg button.active{background:var(--green);color:#fff;box-shadow:var(--shadow);}
+.seg.seg3 button{font-size:13px;padding:0 4px;}
 .rowfilter{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .rowfilter button{min-width:40px;height:40px;padding:0 10px;border-radius:12px;background:#eef1ee;color:var(--muted);font-weight:700;font-size:15px;}
 .rowfilter button.active{background:var(--green);color:#fff;box-shadow:var(--shadow);}
