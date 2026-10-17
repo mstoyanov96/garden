@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.57.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.58.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -30,6 +30,8 @@
   var statPeriod = (function () { try { var v = localStorage.getItem(STAT_PERIOD_KEY); return (v === 'week' || v === 'month' || v === 'year') ? v : 'today'; } catch (e) { return 'today'; } })();
   var statsMode = 'season'; // изглед на Статистика: 'season' | 'month' | 'weeks'
   var statsRef = null;      // Date-курсор за месец/седмици (кой месец / коя група седмици)
+  var logFilterType = 'all'; // филтър на дневника по вид действие ('all' или тип събитие)
+  var logFilterUser = 'all'; // филтър на дневника по човек ('all' или id на потребител)
   var harvestHL = null;     // null или { id: kg } — подчертани дървета на картата (кой колко е дал)
   var statSuppressClick = false; // пропусни клика след суайп по бройките
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
@@ -978,7 +980,7 @@
       return '<div class="list-row"><div class="ic harvest">🌰</div>' +
         '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
     var bucketOpts = '<option value="">— без кофа (само ядка) —</option>' +
@@ -1009,7 +1011,7 @@
       return '<div class="list-row"><div class="ic harvest">⚪</div>' +
         '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
     return '<div class="card" style="margin-top:4px">' +
@@ -1041,7 +1043,7 @@
       return '<div class="list-row"><div class="ic harvest">🥥</div>' +
         '<div class="tx"><b>' + fmtKg(e.buckets) + ' кофи</b><small>≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг обелени' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени обелени.</p>';
     return '<div class="card" style="margin-top:4px">' +
@@ -1174,23 +1176,27 @@
   // =======================================================================
   //  LOG / CHANGE LOG
   // =======================================================================
+  // Видове записи в дневника (икона, цвят, етикет) — ползва се от logRow и филтрите
+  var LOG_TYPES = {
+    water: { ic: '💧', cls: 'water', t: 'Поливане' },
+    fertilize: { ic: '🌱', cls: 'fert', t: 'Торене' },
+    harvest_tree: { ic: '🧺', cls: 'harvest', t: 'Събиране (дърво)' },
+    harvest_ground: { ic: '🍂', cls: 'harvest', t: 'Събиране (земя)' },
+    shell: { ic: '🥥', cls: 'harvest', t: 'Обелени (ръчно)' },
+    clean: { ic: '🌰', cls: 'harvest', t: 'Изчистена ядка' },
+    sort: { ic: '⚪', cls: 'harvest', t: 'Сортиране (бели/черни)' },
+    mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
+    photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
+    tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
+    buyer_add: { ic: '🤝', cls: 'sys', t: 'Нов купувач' },
+    buyer_del: { ic: '🗑️', cls: 'sys', t: 'Изтрит купувач' },
+    note: { ic: '📝', cls: 'sys', t: 'Бележка' }
+  };
+  // кои видове записи може да се редактират (дата + стойности)
+  var EDITABLE_TYPES = { harvest_tree: 1, harvest_ground: 1, shell: 1, clean: 1, sort: 1, fertilize: 1, water: 1, mow: 1, note: 1 };
+
   function logRow(e) {
-    var map = {
-      water: { ic: '💧', cls: 'water', t: 'Поливане' },
-      fertilize: { ic: '🌱', cls: 'fert', t: 'Торене' },
-      harvest_tree: { ic: '🧺', cls: 'harvest', t: 'Събиране (дърво)' },
-      harvest_ground: { ic: '🍂', cls: 'harvest', t: 'Събиране (земя)' },
-      shell: { ic: '🥥', cls: 'harvest', t: 'Обелени (ръчно)' },
-      clean: { ic: '🌰', cls: 'harvest', t: 'Изчистена ядка' },
-      sort: { ic: '⚪', cls: 'harvest', t: 'Сортиране (бели/черни)' },
-      mow: { ic: '🌾', cls: 'mow', t: 'Косене' },
-      photo: { ic: '📷', cls: 'sys', t: 'Снимка' },
-      tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
-      buyer_add: { ic: '🤝', cls: 'sys', t: 'Нов купувач' },
-      buyer_del: { ic: '🗑️', cls: 'sys', t: 'Изтрит купувач' },
-      note: { ic: '📝', cls: 'sys', t: 'Бележка' }
-    };
-    var m = map[e.type] || { ic: '•', cls: 'sys', t: e.type };
+    var m = LOG_TYPES[e.type] || { ic: '•', cls: 'sys', t: e.type };
     var who = db.users.find(function (u) { return u.id === e.createdBy; });
     var t = e.treeId ? tree(e.treeId) : null;
     var detail = '';
@@ -1218,18 +1224,46 @@
       '<div class="meta">' + fmtDate(e.date) +
       (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
         '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="purge:' + e.id + '">🗑️ Завинаги</button>'
-        : '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
+        : (EDITABLE_TYPES[e.type] ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️ Редактирай</button>' : '') +
+        '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
       '</div></div>';
   }
 
   function viewLog() {
-    var evs = (isAdmin() ? db.events : activeEvents()).slice().sort(function (a, b) {
+    var all = (isAdmin() ? db.events : activeEvents()).slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;      // по-новата дата отгоре
       return (b.createdAt || 0) - (a.createdAt || 0);               // при същата дата — последно добавеното отгоре
     });
+    // кои видове и кои хора изобщо присъстват в записите (за да не показваме празни филтри)
+    var typesPresent = {}, usersPresent = {};
+    all.forEach(function (e) { typesPresent[e.type] = 1; if (e.createdBy) usersPresent[e.createdBy] = 1; });
+    var evs = all.filter(function (e) {
+      if (logFilterType !== 'all' && e.type !== logFilterType) return false;
+      if (logFilterUser !== 'all' && e.createdBy !== logFilterUser) return false;
+      return true;
+    });
+    // филтър по вид действие
+    var typeBtns = '<button class="' + (logFilterType === 'all' ? 'active' : '') + '" data-action="logtype:all">Всички</button>' +
+      Object.keys(LOG_TYPES).filter(function (k) { return typesPresent[k]; }).map(function (k) {
+        return '<button class="' + (logFilterType === k ? 'active' : '') + '" data-action="logtype:' + k + '">' + LOG_TYPES[k].ic + ' ' + esc(LOG_TYPES[k].t) + '</button>';
+      }).join('');
+    // филтър по човек
+    var userBtns = '<button class="' + (logFilterUser === 'all' ? 'active' : '') + '" data-action="loguser:all">Всички</button>' +
+      db.users.filter(function (u) { return usersPresent[u.id]; }).map(function (u) {
+        return '<button class="' + (logFilterUser === u.id ? 'active' : '') + '" data-action="loguser:' + u.id + '">' + esc(u.name) + '</button>';
+      }).join('');
+    var shown = Math.min(evs.length, 200);
+    var countNote = evs.length > shown
+      ? '<p class="muted mb" style="font-size:12px">Показани са последните ' + shown + ' от ' + evs.length + '. Стесни търсенето с филтрите, за да видиш по-стари записи.</p>'
+      : '<p class="muted mb" style="font-size:12px">Намерени записи: ' + evs.length + '.</p>';
     return topbar('Дневник / Чейндж лог', { back: 'nav:home' }) + '<div class="content">' +
       '<p class="muted mb">Всичко кой какво е правил, с дати и имена. Изтритото се пази (soft delete).</p>' +
-      '<div class="card">' + (evs.length ? evs.slice(0, 100).map(logRow).join('') : '<p class="muted">Още няма записи.</p>') + '</div>' +
+      '<div class="section-title">🔎 Вид действие</div>' +
+      '<div class="rowfilter logfilter">' + typeBtns + '</div>' +
+      '<div class="section-title">👤 Човек</div>' +
+      '<div class="rowfilter logfilter">' + userBtns + '</div>' +
+      countNote +
+      '<div class="card">' + (evs.length ? evs.slice(0, shown).map(logRow).join('') : '<p class="muted">Няма записи за този филтър.</p>') + '</div>' +
       '</div>';
   }
 
@@ -2157,6 +2191,10 @@
       }
       case 'restore': if (isAdmin()) { restore(parts[1]); render(); } break;
       case 'purge': if (isAdmin() && confirm('Да изтрия ли записа ЗАВИНАГИ? Не може да се върне.')) { purgeEvent(parts[1]); } break;
+      case 'edit': editEvent(parts[1]); break;
+      case 'saveedit': saveEditEvent(parts[1]); break;
+      case 'logtype': logFilterType = parts[1] || 'all'; render(); break;
+      case 'loguser': logFilterUser = parts.slice(1).join(':') || 'all'; render(); break;
       case 'react': toggleReaction(parts[1]); break;
 
       case 'newsale': sheetNewSale(); break;
@@ -2616,6 +2654,122 @@
     closeSheet(); render();
   }
 
+  // ---- Редакция на съществуващ запис (само админ): смяна на дата и стойности ----
+  function editEvent(evId) {
+    if (!isAdmin()) return;
+    var e = db.events.find(function (x) { return x.id === evId; });
+    if (!e || e.deletedAt || !EDITABLE_TYPES[e.type]) return;
+    function num(n) { return (n == null || n === '') ? '' : fmtKg(n); }
+    var m = LOG_TYPES[e.type] || { ic: '•', t: e.type };
+    var tt = e.treeId ? tree(e.treeId) : null;
+    var body = '<h3>✏️ Редакция · ' + m.ic + ' ' + esc(m.t) + (tt ? ' · ' + esc(tt.code) : '') + '</h3>' +
+      '<div class="field"><label>Дата</label><input id="edDate" class="input" type="date" value="' + (e.date || DB.todayISO()) + '"/></div>';
+
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') {
+      var bk = e.buckets || {};
+      var keys = Object.keys(bk);
+      if (keys.length <= 1) {
+        var curBid = keys[0] || db.settings.buckets[0].id;
+        var curCnt = keys[0] != null ? bk[keys[0]] : 1;
+        var opts = db.settings.buckets.map(function (b) {
+          return '<option value="' + b.id + '"' + (b.id === curBid ? ' selected' : '') + '>' + esc(b.name) + '</option>';
+        }).join('');
+        body += '<div class="field"><label>Кофа</label><select id="edBucket" class="input">' + opts + '</select></div>' +
+          '<div class="field"><label>Колко кофи</label><input id="edCount" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + num(curCnt) + '"/></div>';
+      } else {
+        body += '<div class="field"><label>Кофи</label>' + keys.map(function (bid) {
+          var b = bucket(bid);
+          return '<div class="row" style="align-items:center;gap:8px;margin-bottom:6px"><span style="min-width:90px">' + esc(b ? b.name : bid) + '</span>' +
+            '<input id="edc_' + bid + '" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + num(bk[bid]) + '"/></div>';
+        }).join('') + '</div>';
+      }
+      body += '<div class="field"><label>Колко пълни (%)</label><input id="edFill" class="input" type="number" step="5" min="0" max="100" inputmode="numeric" value="' + (e.fill != null ? e.fill : 100) + '"/></div>';
+      var stOpts = ['green', 'shelled', 'clean'].map(function (s) {
+        return '<option value="' + s + '"' + ((e.state || 'green') === s ? ' selected' : '') + '>' + stateLabel(s) + '</option>';
+      }).join('');
+      body += '<div class="field"><label>Вид</label><select id="edState" class="input">' + stOpts + '</select></div>';
+    } else if (e.type === 'clean') {
+      body += '<div class="field"><label>Чиста ядка (кг)</label><input id="edKg" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + num(e.kg) + '"/></div>';
+    } else if (e.type === 'shell') {
+      body += '<div class="field"><label>Обелени кофи (за сирене)</label><input id="edBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + num(e.buckets) + '"/></div>';
+    } else if (e.type === 'sort') {
+      body += '<div class="row">' +
+        '<div class="field"><label>⚪ Бели (кг)</label><input id="edWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + num(e.whiteKg) + '"/></div>' +
+        '<div class="field"><label>⚫ Черни (кг)</label><input id="edBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + num(e.blackKg) + '"/></div></div>';
+    } else if (e.type === 'fertilize') {
+      body += '<div class="field"><label>С какво</label><input id="edWhat" class="input" type="text" value="' + esc(e.what || '') + '"/></div>' +
+        '<div class="row"><div class="field"><label>Количество</label><input id="edQty" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + num(e.qty) + '"/></div>' +
+        '<div class="field"><label>Мярка</label><input id="edUnit" class="input" type="text" value="' + esc(e.unit || '') + '"/></div></div>';
+    } else if (e.type === 'water') {
+      body += '<div class="field"><label>Литри</label><input id="edQty" class="input" type="number" step="1" min="0" inputmode="decimal" value="' + num(e.qty) + '"/></div>';
+    } else if (e.type === 'note') {
+      body += '<div class="field"><label>Бележка</label><input id="edNote" class="input" type="text" value="' + esc(e.note || '') + '"/></div>';
+    }
+    body += '<button class="btn mt" data-action="saveedit:' + e.id + '">💾 Запази промените</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>';
+    openSheet(body);
+  }
+
+  function saveEditEvent(evId) {
+    if (!isAdmin()) return;
+    var e = db.events.find(function (x) { return x.id === evId; });
+    if (!e || e.deletedAt || !EDITABLE_TYPES[e.type]) return;
+    var date = (el('edDate') && el('edDate').value) || e.date;
+
+    if (e.type === 'harvest_tree' || e.type === 'harvest_ground') {
+      var keys = Object.keys(e.buckets || {});
+      var buckets = {};
+      if (keys.length <= 1) {
+        var bidEl = el('edBucket');
+        var bid = (bidEl && bidEl.value) || keys[0] || db.settings.buckets[0].id;
+        var cnt = parseFloat(el('edCount').value);
+        if (!(cnt > 0)) { alert('Въведи поне 0.25 кофа.'); return; }
+        buckets[bid] = cnt;
+      } else {
+        var any = false;
+        keys.forEach(function (bid) {
+          var inp = el('edc_' + bid);
+          var v = inp ? parseFloat(inp.value) : 0;
+          if (v > 0) { buckets[bid] = v; any = true; }
+        });
+        if (!any) { alert('Въведи поне една кофа.'); return; }
+      }
+      var fill = parseInt(el('edFill').value, 10);
+      if (!(fill >= 0)) fill = 100; if (fill > 100) fill = 100;
+      var stEl = el('edState');
+      e.buckets = buckets;
+      e.fill = fill;
+      if (stEl) e.state = stEl.value;
+    } else if (e.type === 'clean') {
+      var kg = parseFloat(el('edKg').value);
+      if (!(kg > 0)) { alert('Въведи тегло по-голямо от 0.'); return; }
+      e.kg = kg;
+    } else if (e.type === 'shell') {
+      var bkv = parseFloat(el('edBuckets').value);
+      if (!(bkv > 0)) { alert('Въведи кофи по-голямо от 0.'); return; }
+      e.buckets = bkv;
+    } else if (e.type === 'sort') {
+      var w = parseFloat(el('edWhite').value); if (!(w >= 0)) w = 0;
+      var k = parseFloat(el('edBlack').value); if (!(k >= 0)) k = 0;
+      if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
+      e.whiteKg = w; e.blackKg = k;
+    } else if (e.type === 'fertilize') {
+      e.what = (el('edWhat') && el('edWhat').value || '').trim();
+      var fq = parseFloat(el('edQty').value); e.qty = (fq >= 0) ? fq : null;
+      e.unit = (el('edUnit') && el('edUnit').value || '').trim();
+    } else if (e.type === 'water') {
+      var wq = parseFloat(el('edQty').value); e.qty = (wq >= 0) ? wq : 0;
+    } else if (e.type === 'note') {
+      e.note = (el('edNote') && el('edNote').value || '').trim();
+    }
+
+    e.date = date;
+    e.editedAt = Date.now();
+    e.editedBy = db.currentUserId;
+    save();
+    closeSheet(); render();
+  }
+
   function saveTreeHarvestInline(id) {
     var t = tree(id); if (!t) return;
     var bid = (harvestBucket && bucket(harvestBucket)) ? harvestBucket : db.settings.buckets[0].id;
@@ -2780,7 +2934,7 @@
       return '<div class="list-row"><div class="ic harvest">🌰</div>' +
         '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
     var sortEntries = activeEvents().filter(function (e) { return e.type === 'sort'; })
@@ -2792,7 +2946,7 @@
       return '<div class="list-row"><div class="ic harvest">⚪</div>' +
         '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        (isAdmin() ? '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
+        (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
     openSheet('<h3>🌰 Изчистена ядка (рандеман)</h3>' +
