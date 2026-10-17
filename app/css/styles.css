@@ -283,9 +283,6 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .map-hint{font-size:12px;color:var(--muted);background:var(--green-soft);border-radius:10px;padding:8px 10px;margin:4px 0 10px;}
 .map-tools-row{margin:4px 0 8px;}
 .map-tools-row .btn{width:100%;}
-.findtree-row{display:flex;gap:8px;margin:0 0 10px;}
-.findtree-row .input{flex:1;min-width:0;}
-.findtree-row .btn{width:auto;white-space:nowrap;padding:0 16px;}
 .pickbanner{background:var(--green-soft);border:2px solid var(--green);border-radius:12px;padding:12px;color:var(--green-dark);}
 .pickchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 
