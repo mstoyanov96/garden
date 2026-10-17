@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.58.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.58.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1971,85 +1971,8 @@
   }
   // закача слушатели за задържане/влачене върху картата (докосване и мишка за тест)
   function initMapSelect() {
-    var mw = el('mapwrap');
-    if (!mw || editMode) return;
-    var pressTimer = null, startX = 0, startY = 0, dragging = false, moved = false, startId = null;
-    var pinching = false;   // активен жест със зуум (два пръста) — да не маркира дърво
-
-    function cellIdAt(x, y) {
-      var node = document.elementFromPoint(x, y);
-      // върви нагоре ръчно (по-надеждно от closest при SVG елементи в стари браузъри)
-      while (node && node !== document.body) {
-        if (node.classList && node.classList.contains('tree-cell')) return node.getAttribute('data-tid');
-        node = node.parentNode;
-      }
-      return null;
-    }
-    function onDown(x, y, id) {
-      startX = x; startY = y; moved = false; dragging = false; startId = id;
-      if (pressTimer) clearTimeout(pressTimer);
-      if (!id) return;
-      pressTimer = setTimeout(function () {
-        // задържане → влез в режим избор и маркирай това дърво
-        pressTimer = null;
-        mapSelect = true; dragging = true; mapSuppressClick = true;
-        selectMapTree(id);
-        if (navigator.vibrate) navigator.vibrate(20);
-      }, 350);
-    }
-    function onMove(x, y) {
-      // широк праг — пръстът леко мърда при натискане; само реално плъзгане да брои за скрол
-      if (Math.abs(x - startX) > 24 || Math.abs(y - startY) > 24) moved = true;
-      if (!dragging) {
-        // ако се движи осезаемо преди задържането да е сработило — това е скрол, отмени
-        if (moved && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-        return;
-      }
-      var id = cellIdAt(x, y);
-      if (id) { selectMapTree(id); mapSuppressClick = true; }
-    }
-    function onUp() {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      dragging = false;
-      // ако не последва клик (напр. след влачене) — освободи флага след малко
-      if (mapSuppressClick) setTimeout(function () { mapSuppressClick = false; }, 350);
-    }
-
-    mw.addEventListener('touchstart', function (e) {
-      if (e.touches.length >= 2) {
-        // два пръста = жест за зуум → отмени задържането и не маркирай/отваряй дърво
-        pinching = true;
-        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-        dragging = false; mapSuppressClick = true;
-        return;
-      }
-      if (pinching) return;
-      var t = e.touches[0]; onDown(t.clientX, t.clientY, cellIdAt(t.clientX, t.clientY));
-    }, { passive: true });
-    mw.addEventListener('touchmove', function (e) {
-      if (pinching || e.touches.length >= 2) return;
-      var t = e.touches[0];
-      if (dragging) e.preventDefault(); // спри скрола докато влачим за избор
-      onMove(t.clientX, t.clientY);
-    }, { passive: false });
-    mw.addEventListener('touchend', function (e) {
-      if (pinching) {
-        // изчакай всички пръсти да се вдигнат, после пусни жеста и потисни клика
-        if (e.touches.length === 0) {
-          pinching = false;
-          mapSuppressClick = true;
-          setTimeout(function () { mapSuppressClick = false; }, 400);
-        }
-        return;
-      }
-      onUp();
-    });
-    // ВАЖНО: не слушаме touchcancel — на iOS той се вдига спорадично и убиваше задържането
-    // мишка (за тест на компютър)
-    mw.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY, cellIdAt(e.clientX, e.clientY)); });
-    mw.addEventListener('mousemove', function (e) { if (e.buttons) onMove(e.clientX, e.clientY); });
-    mw.addEventListener('mouseup', onUp);
-    mw.addEventListener('mouseleave', onUp);
+    // Избор на няколко дървета става само с бутона „☑️ Избери няколко дървета"
+    // (режим mapSelect) + докосване на дърветата. Няма драг/задържане върху картата.
   }
 
   // ръчно въведени стойности в броячите за кофи → пазим ги директно в harvestDraft
