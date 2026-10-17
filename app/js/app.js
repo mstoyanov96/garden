@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.58.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.58.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -748,7 +748,7 @@
     var cols2 = maxCol * 2;
     var html = '<div class="grid" style="grid-template-columns:16px repeat(' + cols2 + ',1fr)">';
     html += '<div class="corner" style="grid-row:1;grid-column:1"></div>';
-    for (var c = 1; c <= maxCol; c++) html += '<div class="colhead" style="grid-row:1;grid-column:' + (2 * c) + ' / span 2">' + c + '</div>';
+    for (var c = 1; c <= maxCol; c++) html += '<div class="colhead" style="grid-row:1;grid-column:' + (2 * c) + ' / span 2">' + (c - 1) + '</div>';
     // декоративни зони (Градина, Къща, Кокошки, Джаро) — местят се/оразмеряват в режим редакция
     zones.forEach(function (z) {
       var act = edit ? ' data-action="editzone:' + z.id + '"' : '';
@@ -1049,7 +1049,7 @@
     return '<div class="card" style="margin-top:4px">' +
       '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Обелена</b> = орех с черупка (след махане на зелената кора). Обелените винаги се мерят в <b>кофи за сирене</b> — независимо в каква кофа е събрано зеленото. Накрая, като обелиш, въведи колко кофи за сирене обелени излязоха.</p>' +
       (estBuckets > 0
-        ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Ориентировъчно за днес: <b>≈ ' + fmtKg(estBuckets) + ' кофи за сирене</b> (от ' + fmtKg(greenBkToday) + ' кофи зелено × коефициент ' + fmtKg(shellYield()) + '). Можеш да въведеш друго число.</p>'
+        ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Приложението вече автоматично пресметна обелените за днес и ги попълни в полето отдолу: от <b>' + fmtKg(greenBkToday) + ' кофи зелено</b> × коефициента <b>' + fmtKg(shellYield()) + '</b> (толкова кофи обелени излизат от 1 кофа зелени) ≈ <b>' + fmtKg(estBuckets) + ' кофи за сирене</b>. Това е само ориентир — ако в този ден реално излезе друго число, просто смени стойността в полето отдолу.</p>'
         : '') +
       '<div class="field"><label>Дата</label><input id="shDate" class="input" type="date" value="' + today + '"/></div>' +
       '<div class="field"><label>Обелени кофи за сирене (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
