@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.58.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.58.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1050,7 +1050,7 @@
       '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Обелена</b> = орех с черупка (след махане на зелената кора). Обелените винаги се мерят в <b>кофи за сирене</b> — независимо в каква кофа е събрано зеленото. Накрая, като обелиш, въведи колко кофи за сирене обелени излязоха.</p>' +
       (estBuckets > 0
         ? '<p class="muted" style="font-size:12px;margin:0 0 8px">Приложението вече автоматично пресметна обелените за днес и ги попълни в полето отдолу: от <b>' + fmtKg(greenBkToday) + ' кофи зелено</b> × коефициента <b>' + fmtKg(shellYield()) + '</b> (толкова кофи обелени излизат от 1 кофа зелени) ≈ <b>' + fmtKg(estBuckets) + ' кофи за сирене</b>. Това е само ориентир — ако в този ден реално излезе друго число, просто смени стойността в полето отдолу.</p>'
-        : '') +
+        : '<p class="muted" style="font-size:12px;margin:0 0 8px">Когато събереш зелено за даден ден, приложението само пресмята колко кофи обелени се очакват (зелените × коефициента <b>' + fmtKg(shellYield()) + '</b> — толкова кофи обелени излизат от 1 кофа зелени) и ги попълва автоматично в полето отдолу за същата дата. Днес още няма събрано зелено, затова полето е празно — избери дата и въведи колко кофи за сирене реално обели.</p>') +
       '<div class="field"><label>Дата</label><input id="shDate" class="input" type="date" value="' + today + '"/></div>' +
       '<div class="field"><label>Обелени кофи за сирене (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
       '<button class="btn" data-action="addshell">➕ Запази обелените</button>' +
