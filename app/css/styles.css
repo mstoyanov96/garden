@@ -258,15 +258,15 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell.sel .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));}
 .tree-cell.small-badge .svgwrap{background:#efeaff;border:2px solid #7c5cff;border-radius:50%;box-sizing:border-box;padding:3px;}
 .tree-cell.small-badge .code{background:#7c5cff;color:#fff;padding:1px 6px;border-radius:8px;}
-/* Български сорт — знаме (бяло/зелено/червено) като фон в кръгчето + зелен пръстен */
-.tree-cell.var-bg .svgwrap{border:2px solid #00894f;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(#ffffff 0 33%,#3fbf86 33% 66%,#e34b3f 66% 100%);}
-.tree-cell.var-bg .code{background:#fff;color:#006a47;border:1.5px solid #00894f;padding:1px 6px;border-radius:8px;font-weight:800;}
-/* Френски сорт — знаме (синьо/бяло/червено) като фон в кръгчето + син пръстен */
-.tree-cell.var-fr .svgwrap{border:2px solid #0047a0;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(90deg,#3f74d6 0 33%,#ffffff 33% 66%,#e34b3f 66% 100%);}
-.tree-cell.var-fr .code{background:#fff;color:#0047a0;border:1.5px solid #0047a0;padding:1px 6px;border-radius:8px;font-weight:800;}
-/* Linda сорт — наситено розово като фон в кръгчето + розов пръстен */
-.tree-cell.var-linda .svgwrap{border:2px solid #e21e86;border-radius:50%;box-sizing:border-box;padding:3px;background:#f58dc5;}
-.tree-cell.var-linda .code{background:#fff;color:#c01f74;border:1.5px solid #e21e86;padding:1px 6px;border-radius:8px;font-weight:800;}
+/* Български сорт — знаме (бяло/зелено/червено), меки тонове + зелен пръстен */
+.tree-cell.var-bg .svgwrap{border:2px solid #4cae82;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(#ffffff 0 33%,#9ed9ba 33% 66%,#f0a39c 66% 100%);}
+.tree-cell.var-bg .code{background:#fff;color:#1f7a52;border:1.5px solid #6fc29a;padding:1px 6px;border-radius:8px;font-weight:800;}
+/* Френски сорт — знаме (синьо/бяло/червено), меки тонове + син пръстен */
+.tree-cell.var-fr .svgwrap{border:2px solid #5a7fc4;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(90deg,#9db6e4 0 33%,#ffffff 33% 66%,#f0a39c 66% 100%);}
+.tree-cell.var-fr .code{background:#fff;color:#2f5aa8;border:1.5px solid #8aa6dc;padding:1px 6px;border-radius:8px;font-weight:800;}
+/* Linda сорт — бледо розово (както по-рано) */
+.tree-cell.var-linda .svgwrap{border:2px solid #e9a8cc;border-radius:50%;box-sizing:border-box;padding:3px;background:#fce4f1;}
+.tree-cell.var-linda .code{background:#fff;color:#c01f74;border:1.5px solid #e9a8cc;padding:1px 6px;border-radius:8px;font-weight:800;}
 .tree-cell.me-here .svgwrap{filter:drop-shadow(0 0 0 3px #e4572e);}
 .tree-cell.me-here::after{content:'📍';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:20px;animation:mehere 1s infinite;}
 @keyframes mehere{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-4px);}}
