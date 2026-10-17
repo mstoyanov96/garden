@@ -258,17 +258,15 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell.sel .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));}
 .tree-cell.small-badge .svgwrap{background:#efeaff;border:2px solid #7c5cff;border-radius:50%;box-sizing:border-box;padding:3px;}
 .tree-cell.small-badge .code{background:#7c5cff;color:#fff;padding:1px 6px;border-radius:8px;}
-/* флагче на сорта в ъгъла */
-.tree-cell .varflag{position:absolute;top:-7px;left:1px;font-size:12px;line-height:1;z-index:2;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));}
-/* Български сорт — зелен пръстен + флаг-градиент на етикета */
-.tree-cell.var-bg .svgwrap{background:#eafaef;border:2px solid #00966e;border-radius:50%;box-sizing:border-box;padding:3px;}
-.tree-cell.var-bg .code{background:linear-gradient(#fff 0 33%,#00966e 33% 66%,#d62612 66% 100%);color:#fff;padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,.65);}
-/* Френски сорт — син пръстен + флаг-градиент на етикета */
-.tree-cell.var-fr .svgwrap{background:#eaf0fb;border:2px solid #0055a4;border-radius:50%;box-sizing:border-box;padding:3px;}
-.tree-cell.var-fr .code{background:linear-gradient(90deg,#0055a4 0 33%,#fff 33% 66%,#ef4135 66% 100%);color:#1a1a1a;padding:1px 6px;border-radius:8px;text-shadow:0 0 2px rgba(255,255,255,.95);}
-/* Linda сорт — розов пръстен + розов етикет */
-.tree-cell.var-linda .svgwrap{background:#fdeef6;border:2px solid #e84f9c;border-radius:50%;box-sizing:border-box;padding:3px;}
-.tree-cell.var-linda .code{background:#e84f9c;color:#fff;padding:1px 6px;border-radius:8px;}
+/* Български сорт — бледо знаме (бяло/зелено/червено) като фон в кръгчето + зелен пръстен */
+.tree-cell.var-bg .svgwrap{border:2px solid #00966e;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(#ffffff 0 33%,#cdeedd 33% 66%,#f6cfcc 66% 100%);}
+.tree-cell.var-bg .code{background:#fff;color:#006a47;border:1.5px solid #00966e;padding:1px 6px;border-radius:8px;font-weight:800;}
+/* Френски сорт — бледо знаме (синьо/бяло/червено) като фон в кръгчето + син пръстен */
+.tree-cell.var-fr .svgwrap{border:2px solid #0055a4;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(90deg,#d2e0f7 0 33%,#ffffff 33% 66%,#f6cfd2 66% 100%);}
+.tree-cell.var-fr .code{background:#fff;color:#0055a4;border:1.5px solid #0055a4;padding:1px 6px;border-radius:8px;font-weight:800;}
+/* Linda сорт — бледо розово като фон в кръгчето + розов пръстен */
+.tree-cell.var-linda .svgwrap{border:2px solid #e84f9c;border-radius:50%;box-sizing:border-box;padding:3px;background:#fcdcee;}
+.tree-cell.var-linda .code{background:#fff;color:#c43080;border:1.5px solid #e84f9c;padding:1px 6px;border-radius:8px;font-weight:800;}
 .tree-cell.me-here .svgwrap{filter:drop-shadow(0 0 0 3px #e4572e);}
 .tree-cell.me-here::after{content:'📍';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:20px;animation:mehere 1s infinite;}
 @keyframes mehere{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-4px);}}
