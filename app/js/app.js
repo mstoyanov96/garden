@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.59.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.60.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -704,6 +704,7 @@
         db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
         (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
         '</div>') +
+      (editMode ? '' : '<div class="findtree-row"><input id="findTreeInput" class="input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="🔍 Намери орех по код, напр. И6"/><button class="btn sm" data-action="findtree">Отвори</button></div>') +
       (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button>' +
         '<button class="btn sm secondary" data-action="groundquick">🍂 Събери от земята</button></div>') +
       '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode, mapMode) + '</div>' +
@@ -814,6 +815,15 @@
   // =======================================================================
   //  TREE DETAIL
   // =======================================================================
+  // отваря орех по въведен код (напр. „И6") — за да не се налага зуум по картата
+  function openTreeByCode(code) {
+    if (!code) return;
+    var norm = String(code).trim().toUpperCase().replace(/\s+/g, '');
+    if (!norm) return;
+    var t = db.trees.find(function (x) { return !x.deletedAt && String(x.code || '').toUpperCase().replace(/\s+/g, '') === norm; });
+    if (!t) { alert('Няма орех с код „' + code + '". Провери буквата и цифрата (напр. И6).'); return; }
+    treeHarvestOpen = ''; treeDetailsOpen = false; go('tree', t.id);
+  }
   function viewTree(id) {
     var t = tree(id);
     if (!t) return topbar('Дърво', { back: 'nav:home' }) + '<div class="content"><p>Няма такова дърво.</p></div>';
@@ -2007,6 +2017,12 @@
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
   });
+  // Enter в търсачката за орех → отвори орех по код
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'findTreeInput') {
+      e.preventDefault(); openTreeByCode(e.target.value);
+    }
+  });
 
   document.addEventListener('click', function (e) {
     var node = e.target.closest('[data-action]');
@@ -2035,6 +2051,7 @@
         careTab = parts[1]; careScope = 'trees'; careTrees = mapSelected.slice(); careTreePreset = '';
         clearMapSelect(); go('care'); break;
       case 'mapclear': clearMapSelect(); render(); break;
+      case 'findtree': { var fti = el('findTreeInput'); openTreeByCode(fti ? fti.value : ''); break; }
       case 'mapselecttoggle':
         if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
         render(); break;
