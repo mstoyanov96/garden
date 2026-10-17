@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.58.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.59.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -110,6 +110,20 @@
     save(); render();
   }
   function variety(id) { return db.settings.varieties.find(function (v) { return v.id === id; }); }
+  // визуален стил на сорта на картата: флагче в ъгъла + клас за пръстен/етикет (по име на сорта)
+  function varDecor(v) {
+    if (!v) return { cls: '', flag: '' };
+    var n = (v.name || '').toLowerCase();
+    if (n.indexOf('българ') !== -1 || n.indexOf('bulgar') !== -1) return { cls: ' var-bg', flag: '🇧🇬' };
+    if (n.indexOf('френск') !== -1 || n.indexOf('french') !== -1 || n.indexOf('franc') !== -1) return { cls: ' var-fr', flag: '🇫🇷' };
+    if (n.indexOf('линда') !== -1 || n.indexOf('linda') !== -1) return { cls: ' var-linda', flag: '🌸' };
+    return { cls: '', flag: '' };
+  }
+  // легенда с флагчетата само за наличните специални сортове
+  function varietyLegend() {
+    return (db.settings.varieties || []).filter(function (v) { return varDecor(v).flag; })
+      .map(function (v) { return '<span>' + varDecor(v).flag + ' ' + esc(v.name) + '</span>'; }).join('');
+  }
   function bucket(id) { return db.settings.buckets.find(function (b) { return b.id === id; }); }
   var BUCKET_IMG = { buc_cheese: 'assets/bucket_cheese.png', buc_black: 'assets/bucket_black.png', buc_small: 'assets/bucket_round.png' };
   function bucketIcon(b) {
@@ -698,12 +712,13 @@
           '<span><i class="dotc green"></i>Брано скоро (' + fr.fresh + ')</span>' +
           '<span><i class="dotc yellow"></i>Тази седмица (' + fr.week + ')</span>' +
           '<span><i class="dotc" style="background:#aab7af"></i>Отдавна / не е брано (' + fr.old + ')</span>' +
-          '<span>✅ Събрано днес (' + doneToday + ')</span></div>'
+          '<span>✅ Събрано днес (' + doneToday + ')</span>' + varietyLegend() + '</div>'
         : '<div class="legend">' +
           '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
           '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
           '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
-          '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span></div>') +
+          '<span><i class="dotc" style="background:#7c5cff"></i>дребен сорт</span>' + varietyLegend() + '</div>') +
+
 
       '</div>';
   }
@@ -768,7 +783,8 @@
         if (t) {
           var dim = (fVar && t.varietyId !== fVar) || (fHealth && t.health !== fHealth);
           var v = variety(t.varietyId);
-          var small = v && v.size === 'small' ? ' small-badge' : '';
+          var dec = varDecor(v);
+          var small = (!dec.cls && v && v.size === 'small') ? ' small-badge' : '';
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
           var hl = (harvestHL && harvestHL[t.id] != null) ? ' hl-harvest' : '';
@@ -783,8 +799,10 @@
           } else {
             svg = treeSVG(t.health);
           }
-          html += '<div class="tree-cell' + small + sel + doneCls + hl + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
+          html += '<div class="tree-cell' + small + dec.cls + sel + doneCls + hl + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
+            (dec.flag ? '<span class="varflag">' + dec.flag + '</span>' : '') +
             '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span>' + ageHtml + hlBadge + '</div>';
+
         } else if (edit && !isReserved) {
           html += '<div class="cell-empty" data-action="addtree:' + rk + ':' + c + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2">＋</div>';
         }
