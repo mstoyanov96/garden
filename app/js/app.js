@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.66.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.66.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1885,6 +1885,7 @@
       }).join('') + '</div></div>' +
       '<div class="field"><label>Сорт</label><select id="etVar" class="input">' +
       db.settings.varieties.map(function (v) { return '<option value="' + v.id + '"' + (v.id === t.varietyId ? ' selected' : '') + '>' + esc(v.name) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>🗓️ Посадено</label><input id="etDate" type="date" class="input" value="' + esc(t.plantedAt || '') + '"/></div>' +
       '<div class="field"><label>Височина (м)</label><input id="etHeight" type="number" step="0.1" min="0" class="input" placeholder="напр. 3.5" value="' + (t.height != null && t.height !== '' ? esc(t.height) : '') + '"/></div>' +
       '<div class="field"><label>Бележка</label><textarea id="etNote" class="input">' + esc(t.note || '') + '</textarea></div>' +
       '<button class="btn" data-action="savetree:' + id + '">💾 Запази</button>' +
@@ -2168,7 +2169,7 @@
         else if (statsMode === 'oneweek') { var w1 = statsRef || new Date(); var n1 = new Date(w1); n1.setDate(n1.getDate() + dir * 7); statsRef = n1; }
         render(); break;
       }
-      case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note, height: te.height } : null; sheetTreeEdit(parts[1]); break; }
+      case 'treeedit': { var te = tree(parts[1]); treeEditBefore = te ? { id: te.id, health: te.health, varietyId: te.varietyId, note: te.note, height: te.height, plantedAt: te.plantedAt } : null; sheetTreeEdit(parts[1]); break; }
       case 'treeharvest':
         treeHarvestOpen = (treeHarvestOpen === parts[1] ? '' : parts[1]);
         if (treeHarvestOpen) { if (!harvestDraft[treeHarvestOpen]) harvestDraft[treeHarvestOpen] = {}; if (harvestDraft[treeHarvestOpen]._count == null) harvestDraft[treeHarvestOpen]._count = 1; }
@@ -2517,12 +2518,13 @@
   }
   function saveTreeEdit(id) {
     var t = tree(id); if (!t) return;
-    var before = (treeEditBefore && treeEditBefore.id === id) ? treeEditBefore : { health: t.health, varietyId: t.varietyId, note: t.note, height: t.height };
+    var before = (treeEditBefore && treeEditBefore.id === id) ? treeEditBefore : { health: t.health, varietyId: t.varietyId, note: t.note, height: t.height, plantedAt: t.plantedAt };
     // формата „Състояние“ (sheetTreeEdit): etVar/etNote; редакторът на схемата (sheetEditTree): etCode/etVar2/etHealth2
-    var varEl = el('etVar'), noteEl = el('etNote'), codeEl = el('etCode'), var2El = el('etVar2'), health2El = el('etHealth2'), heightEl = el('etHeight');
+    var varEl = el('etVar'), noteEl = el('etNote'), codeEl = el('etCode'), var2El = el('etVar2'), health2El = el('etHealth2'), heightEl = el('etHeight'), dateEl = el('etDate');
     if (varEl) t.varietyId = varEl.value;
     if (noteEl) t.note = noteEl.value;
     if (heightEl) t.height = heightEl.value === '' ? null : parseFloat(heightEl.value);
+    if (dateEl) t.plantedAt = dateEl.value || null;
     if (var2El) t.varietyId = var2El.value;
     if (health2El) t.health = health2El.value;
     if (codeEl) t.code = (codeEl.value || t.code).trim();
@@ -2531,6 +2533,7 @@
     if (before.varietyId !== t.varietyId) changes.varietyId = { before: before.varietyId, after: t.varietyId };
     if ((before.note || '') !== (t.note || '')) changes.note = { before: before.note || '', after: t.note || '' };
     if ((before.height == null ? '' : before.height) !== (t.height == null ? '' : t.height)) changes.height = { before: before.height == null ? '' : before.height, after: t.height == null ? '' : t.height };
+    if ((before.plantedAt || '') !== (t.plantedAt || '')) changes.plantedAt = { before: before.plantedAt || '', after: t.plantedAt || '' };
     save();
     var ev = { type: 'tree_edit', treeId: id, date: DB.todayISO(), note: 'състояние: ' + healthLabel(t.health) };
     if (Object.keys(changes).length) ev.changes = changes;
