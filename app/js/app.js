@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.84.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.85.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -91,6 +91,23 @@
     } catch (e) {}
   }
   function notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+  // Показва системно известие през service worker-а (единственият начин, който работи на
+  // iPhone/Android, когато приложението е добавено на екрана и/или е на заден план).
+  // Връща се към new Notification() само ако SW не е наличен (стари десктоп браузъри).
+  function showSysNotif(title, opts) {
+    opts = opts || {};
+    if (!opts.icon) opts.icon = 'assets/icon.svg';
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(function (reg) {
+          try { reg.showNotification(title, opts); }
+          catch (e) { try { new Notification(title, opts); } catch (e2) {} }
+        }).catch(function () { try { new Notification(title, opts); } catch (e) {} });
+        return;
+      }
+    } catch (e) {}
+    try { new Notification(title, opts); } catch (e) {}
+  }
   // Включени ли са известията — пази се локално на устройството (по дефолт ИЗКЛЮЧЕНИ),
   // отделно за всеки потребител. Не се синхронизира, за да не се включват сами на други телефони.
   function notifPrefKey() { return 'walnut_notif_' + (db.currentUserId || ''); }
@@ -117,7 +134,7 @@
       var t = e.treeId ? tree(e.treeId) : null;
       var title = (m.ic || '📜') + ' ' + m.t + (t ? ' · ' + t.code : '');
       var body = (who ? who.name : '') + (e.note ? ' — ' + e.note : '');
-      try { new Notification(title, { body: body, tag: e.id }); } catch (err) {}
+      showSysNotif(title, { body: body, tag: e.id });
     });
   }
   // извиква се при пристигане на отдалечени промени — известява + обновява бройките
@@ -151,7 +168,7 @@
     if (on) { setNotifPref(false); render(); return; }
     // включване → искаме разрешение от системата (ако това устройство още няма)
     var apply = function (perm) {
-      if (perm === 'granted') { setNotifPref(true); try { new Notification('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); } catch (e) {} }
+      if (perm === 'granted') { setNotifPref(true); showSysNotif('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); }
       render();
     };
     if (Notification.permission === 'granted') { apply('granted'); return; }
@@ -1434,7 +1451,7 @@
       '<div class="meta">' + fmtDate(e.date) +
       (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
         '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="purge:' + e.id + '">🗑️ Завинаги</button>'
-        : (EDITABLE_TYPES[e.type] ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️ Редактирай</button>' : '') +
+        : (EDITABLE_TYPES[e.type] ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button>' : '') +
         '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
       '</div></div>';
   }

@@ -215,7 +215,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .kernelwhite span{background:var(--green-soft);color:var(--green-dark);font-size:12px;padding:2px 9px;border-radius:999px;}
 .kernelsub{font-size:13px;color:var(--muted);margin-top:9px;}
 .kernelsub .ks-rem{color:var(--ink);line-height:1.4;}
-.kernelsub .ks-rem b{color:var(--green-dark);}
+.kernelsub .ks-rem b{font-weight:800;}
 .kernelsub .ks-hint{font-size:11px;color:var(--muted);margin-top:3px;}
 /* банер при маркирани дървета на картата */
 .hl-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
@@ -453,7 +453,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bottomnav .nav.active .ic{background:var(--green-soft);transform:translateY(-1px);}
 .bottomnav .nav .ic{position:relative;}
 .navbadge{position:absolute;top:1px;right:2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red,#e4572e);color:#fff;font-size:10px;font-weight:800;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--bg,#fff);box-sizing:border-box;}
-.list-row.unread{background:var(--green-soft);border-left:3px solid var(--green);}
+.list-row.unread{background:var(--green-soft);border-left:3px solid var(--green);margin-left:-16px;margin-right:-16px;padding-left:13px;padding-right:16px;}
 
 /* ---- FAB --------------------------------------------------------------- */
 .fab{position:fixed;right:calc(50% - 240px + 18px);bottom:calc(88px + env(safe-area-inset-bottom));z-index:55;width:60px;height:60px;border-radius:50%;

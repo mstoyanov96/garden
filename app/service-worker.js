@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v151';              // ← увеличавай при нова версия
+var VERSION = 'v152';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
@@ -33,6 +33,17 @@ self.addEventListener('activate', function (e) {
 
 self.addEventListener('message', function (e) {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// натискане на известие → показва (или отваря) приложението
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if ('focus' in list[i]) return list[i].focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow('./');
+  }));
 });
 
 self.addEventListener('fetch', function (e) {
