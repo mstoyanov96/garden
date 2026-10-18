@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.77.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.78.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -3451,6 +3451,19 @@
   }
 
   if (db.currentUserId && route.name === 'login') route = { name: 'home', param: null };
+  // при презареждане — възстанови последния таб от адреса (#таб/параметър)
+  if (db.currentUserId) {
+    try {
+      var h = (location.hash || '').replace(/^#/, '');
+      if (h) {
+        var hp = h.split('/');
+        var hname = hp[0];
+        var hparam = hp[1] ? decodeURIComponent(hp[1]) : null;
+        var restorable = ['home', 'tree', 'harvest', 'care', 'log', 'stats', 'sales', 'buyer', 'settings'];
+        if (restorable.indexOf(hname) !== -1) route = { name: hname, param: hparam };
+      }
+    } catch (err) {}
+  }
   if (db.currentUserId) onUserReady();
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   applyZoom();
