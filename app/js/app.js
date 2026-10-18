@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.81.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.82.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -163,7 +163,7 @@
   // аватар: профилна снимка ако има, иначе инициали
   function avatarHtml(u, extraClass, attr) {
     var cls = 'avatar' + (extraClass ? ' ' + extraClass : '');
-    if (u && u.photo) return '<span class="' + cls + ' hasphoto" style="background-image:url(' + u.photo + ')"' + (attr || '') + ' title="' + esc(u.name || '') + '"></span>';
+    if (u && u.photo) return '<span class="' + cls + ' hasphoto"' + (attr || '') + ' title="' + esc(u.name || '') + '"><img src="' + u.photo + '" alt=""/></span>';
     return '<span class="' + cls + '"' + (attr || '') + ' title="' + esc(u ? (u.name || '') : '') + '">' + initials(u ? u.name : '?') + '</span>';
   }
 
@@ -1178,7 +1178,7 @@
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       var inAvg = !e.excludeAvg;
-      return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '><div class="ic harvest">⚪</div>' +
+      return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '>' + avatarHtml(who, 'lg') +
         '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' : '') +
@@ -1613,7 +1613,7 @@
       (ks.whitePct != null
         ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '% бели</span></div>'
         : '') +
-      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг изчистено' + (ks.remainingWhite != null ? '<br>≈ ' + fmtKg(ks.remainingWhite) + ' кг бели' : '') + ' · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
+      '<div class="kernelsub">' + (ks.expected > 0 ? '<div class="ks-rem">Остават <b>' + fmtKg(ks.remaining) + ' кг</b> изчистено' + (ks.remainingWhite != null ? ' · <b>' + fmtKg(ks.remainingWhite) + ' кг</b> бели' : '') + '</div><div class="ks-hint">рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане</div>' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
@@ -2304,8 +2304,8 @@
   // жив преглед при наместване на профилната снимка нагоре/надолу
   document.addEventListener('input', function (e) {
     if (e.target && e.target.id === 'ppY') {
-      var prev = el('ppPrev');
-      if (prev) prev.style.backgroundPosition = '50% ' + (parseInt(e.target.value, 10) || 0) + '%';
+      var im = el('ppImg');
+      if (im) im.style.objectPosition = '50% ' + (parseInt(e.target.value, 10) || 0) + '%';
     }
   });
 
@@ -2797,7 +2797,7 @@
     if (!pendingPhotoSrc) return;
     openSheet('<h3>📷 Нагласи снимката</h3>' +
       '<p class="muted mb" style="font-size:13px">Плъзни, за да центрираш лицето в кръга.</p>' +
-      '<div id="ppPrev" class="pp-prev" style="background-image:url(' + pendingPhotoSrc + ');background-position:50% 50%"></div>' +
+      '<div id="ppPrev" class="pp-prev"><img id="ppImg" src="' + pendingPhotoSrc + '" alt=""/></div>' +
       '<div class="field"><label>Нагоре / надолу</label><input id="ppY" class="input" type="range" min="0" max="100" value="50"/></div>' +
       '<button class="btn" data-action="savephotoadj">💾 Запази</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
@@ -3274,7 +3274,7 @@
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
-      return '<div class="list-row"><div class="ic harvest">⚪</div>' +
+      return '<div class="list-row">' + avatarHtml(who, 'lg') +
         '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
