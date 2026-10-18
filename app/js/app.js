@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.64.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.65.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -941,9 +941,7 @@
   function viewHarvest() {
     var today = DB.todayISO();
 
-    var scrLabels = { none: 'Избери действие', collect: '🧺 Събиране', shell: '🥥 Белене', clean: '🌰 Чистене', sort: '⚪ Сортиране', fertilize: '🌱 Торене', water: '💧 Поливане', mow: '🌾 Косене' };
     var body = topbar('Действия', { back: 'nav:home' }) + '<div class="content">' +
-      '<details class="sect"' + (harvestScreen === 'none' ? ' open' : '') + '><summary>Вид действие: <b>' + (scrLabels[harvestScreen] || 'Избери') + '</b></summary><div class="sect-body">' +
       '<div class="seg seg4" style="margin-bottom:8px">' +
       '<button class="' + (harvestScreen === 'collect' ? 'active' : '') + '" data-action="hscreen:collect">🧺 Събиране</button>' +
       '<button class="' + (harvestScreen === 'shell' ? 'active' : '') + '" data-action="hscreen:shell">🥥 Белене</button>' +
@@ -954,8 +952,7 @@
       '<button class="' + (harvestScreen === 'fertilize' ? 'active' : '') + '" data-action="hscreen:fertilize">🌱 Торене</button>' +
       '<button class="' + (harvestScreen === 'water' ? 'active' : '') + '" data-action="hscreen:water">💧 Поливане</button>' +
       '<button class="' + (harvestScreen === 'mow' ? 'active' : '') + '" data-action="hscreen:mow">🌾 Косене</button>' +
-      '</div>' +
-      '</div></details>';
+      '</div>';
 
     if (harvestScreen === 'shell') { return body + harvestShellForm() + '</div>'; }
     if (harvestScreen === 'clean') { return body + harvestCleanForm() + '</div>'; }
@@ -1329,12 +1326,20 @@
     var countNote = evs.length > shown
       ? '<p class="muted mb" style="font-size:12px">Показани са последните ' + shown + ' от ' + evs.length + '. Стесни търсенето с филтрите, за да видиш по-стари записи.</p>'
       : '<p class="muted mb" style="font-size:12px">Намерени записи: ' + evs.length + '.</p>';
+    // кратко обобщение на активните филтри за заглавката на свитата секция
+    var activeType = logFilterType === 'all' ? '' : (LOG_TYPES[logFilterType] ? LOG_TYPES[logFilterType].t : '');
+    var activeUser = logFilterUser === 'all' ? '' : ((db.users.filter(function (u) { return u.id === logFilterUser; })[0] || {}).name || '');
+    var activeBits = [activeType, activeUser].filter(Boolean);
+    var filterSummary = activeBits.length ? activeBits.join(' · ') : 'всички';
+    var filtersOpen = activeBits.length > 0; // ако има активен филтър — отвори, иначе свито
     return topbar('Дневник / Чейндж лог', { back: 'nav:home' }) + '<div class="content">' +
       '<p class="muted mb">Всичко кой какво е правил, с дати и имена. Изтритото се пази (soft delete).</p>' +
+      '<details class="sect"' + (filtersOpen ? ' open' : '') + '><summary>🔎 Филтри: <b>' + esc(filterSummary) + '</b></summary><div class="sect-body">' +
       '<div class="section-title">🔎 Вид действие</div>' +
       '<div class="rowfilter logfilter">' + typeBtns + '</div>' +
       '<div class="section-title">👤 Човек</div>' +
       '<div class="rowfilter logfilter">' + userBtns + '</div>' +
+      '</div></details>' +
       countNote +
       '<div class="card">' + (evs.length ? evs.slice(0, shown).map(logRow).join('') : '<p class="muted">Няма записи за този филтър.</p>') + '</div>' +
       '</div>';
