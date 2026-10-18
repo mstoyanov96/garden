@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.65.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.66.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1891,6 +1891,49 @@
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
 
+  // Групова редакция на няколко избрани дървета (само за админ). Празно поле = не променяй.
+  function sheetBulkEdit() {
+    var ids = mapSelected.slice();
+    if (!ids.length) return;
+    openSheet('<h3>Групова редакция на ' + ids.length + ' дървета</h3>' +
+      '<p class="muted mb" style="font-size:13px">Попълни само полетата, които искаш да смениш за всички избрани. Празно поле = не се променя.</p>' +
+      '<div class="field"><label>🗓️ Посадено</label><input id="beDate" type="date" class="input"/></div>' +
+      '<div class="field"><label>Сорт</label><select id="beVar" class="input"><option value="">— не променяй —</option>' +
+      db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>Височина (м)</label><input id="beHeight" type="number" step="0.1" min="0" class="input" placeholder="не променяй"/></div>' +
+      '<div class="field"><label>Здраве</label><select id="beHealth" class="input"><option value="">— не променяй —</option>' +
+      '<option value="green">Здраво</option><option value="yellow">Нужда от грижа</option><option value="red">Болно / изсъхнало</option></select></div>' +
+      '<button class="btn" data-action="savebulkedit">💾 Приложи за всички</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+
+  function saveBulkEdit() {
+    var ids = mapSelected.slice();
+    if (!ids.length) { closeSheet(); return; }
+    var dateEl = el('beDate'), varEl = el('beVar'), heightEl = el('beHeight'), healthEl = el('beHealth');
+    var newDate = dateEl && dateEl.value ? dateEl.value : null;
+    var newVar = varEl && varEl.value ? varEl.value : null;
+    var newHeight = heightEl && heightEl.value !== '' ? parseFloat(heightEl.value) : null;
+    var newHealth = healthEl && healthEl.value ? healthEl.value : null;
+    if (newDate == null && newVar == null && newHeight == null && newHealth == null) { closeSheet(); return; }
+    var count = 0;
+    ids.forEach(function (id) {
+      var t = tree(id); if (!t) return;
+      var changes = {};
+      if (newDate != null && (t.plantedAt || '') !== newDate) { changes.plantedAt = { before: t.plantedAt || '', after: newDate }; t.plantedAt = newDate; }
+      if (newVar != null && t.varietyId !== newVar) { changes.varietyId = { before: t.varietyId, after: newVar }; t.varietyId = newVar; }
+      if (newHeight != null && (t.height == null ? '' : t.height) !== newHeight) { changes.height = { before: t.height == null ? '' : t.height, after: newHeight }; t.height = newHeight; }
+      if (newHealth != null && t.health !== newHealth) { changes.health = { before: t.health, after: newHealth }; t.health = newHealth; }
+      if (Object.keys(changes).length) {
+        addEvent({ type: 'tree_edit', treeId: id, date: DB.todayISO(), note: 'групова редакция', changes: changes });
+        count++;
+      }
+    });
+    clearMapSelect();
+    closeSheet();
+    go('home');
+  }
+
   function sheetNewSale(buyerId) {
     openSheet('<h3>Нова продажба</h3>' +
       '<div class="field"><label>Купувач</label><select id="saleBuyer" class="input">' +
@@ -2042,7 +2085,8 @@
     bar.innerHTML = '<div class="mapbar-info">' + (n ? '<b>' + n + '</b> избрани дървета' : 'Докосни дърветата') + '</div>' +
       '<div class="mapbar-actions">' +
       (n ? '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
-        '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' : '') +
+        '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' +
+        (isAdmin() ? '<button class="btn sm secondary" data-action="mapbulkedit">✏️ Редактирай</button>' : '') : '') +
       '<button class="btn sm ghost" data-action="mapclear">Готово</button>' +
       '</div>';
     bar.classList.add('open');
@@ -2096,6 +2140,8 @@
       case 'mapcare':
         careTab = parts[1]; careScope = 'trees'; careTrees = mapSelected.slice(); careTreePreset = '';
         clearMapSelect(); go('care'); break;
+      case 'mapbulkedit': if (isAdmin()) sheetBulkEdit(); break;
+      case 'savebulkedit': if (isAdmin()) saveBulkEdit(); break;
       case 'mapclear': clearMapSelect(); render(); break;
       case 'mapselecttoggle':
         if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
