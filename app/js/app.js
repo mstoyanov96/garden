@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.70.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.71.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -88,6 +88,11 @@
     } catch (e) {}
   }
   function notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+  // Включени ли са известията — пази се локално на устройството (по дефолт ИЗКЛЮЧЕНИ),
+  // отделно за всеки потребител. Не се синхронизира, за да не се включват сами на други телефони.
+  function notifPrefKey() { return 'walnut_notif_' + (db.currentUserId || ''); }
+  function getNotifPref() { try { return localStorage.getItem(notifPrefKey()) === '1'; } catch (e) { return false; } }
+  function setNotifPref(on) { try { localStorage.setItem(notifPrefKey(), on ? '1' : '0'); } catch (e) {} }
   // засича нови (непознати) записи от ДРУГИ хора след синхронизация
   function primeSeenEvents() { _seenEventIds = {}; (db.events || []).forEach(function (e) { if (e && e.id) _seenEventIds[e.id] = 1; }); }
   function detectNewEvents() {
@@ -101,8 +106,7 @@
     return fresh;
   }
   function notifyNewEvents(list) {
-    var u = me();
-    if (!u || !u.notifyEnabled) return;
+    if (!me() || !getNotifPref()) return;
     if (!notifSupported() || Notification.permission !== 'granted') return;
     list.slice(0, 5).forEach(function (e) {
       var m = LOG_TYPES[e.type] || { ic: '📜', t: e.type };
@@ -129,7 +133,7 @@
       return '<div class="chip orange">Този телефон/браузър не поддържа известия.</div>';
     }
     var perm = Notification.permission;
-    var on = !!(u && u.notifyEnabled) && perm === 'granted';
+    var on = getNotifPref() && perm === 'granted';
     if (perm === 'denied') {
       return '<div class="chip red">Известията са блокирани от настройките на телефона/браузъра. Разреши ги за тази страница, за да ги включиш.</div>';
     }
@@ -140,11 +144,11 @@
   function toggleNotif() {
     var u = me();
     if (!u || !notifSupported()) return;
-    var on = !!u.notifyEnabled && Notification.permission === 'granted';
-    if (on) { u.notifyEnabled = false; save(); render(); return; }
+    var on = getNotifPref() && Notification.permission === 'granted';
+    if (on) { setNotifPref(false); render(); return; }
     // включване → искаме разрешение от системата (ако това устройство още няма)
     var apply = function (perm) {
-      if (perm === 'granted') { u.notifyEnabled = true; save(); try { new Notification('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); } catch (e) {} }
+      if (perm === 'granted') { setNotifPref(true); try { new Notification('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); } catch (e) {} }
       render();
     };
     if (Notification.permission === 'granted') { apply('granted'); return; }
@@ -1673,7 +1677,7 @@
     var s = db.settings;
     var meU = me();
     return topbar('Настройки', { back: 'nav:home' }) + '<div class="content">' +
-      '<details class="sect" open><summary>👤 Моят профил</summary><div class="sect-body">' +
+      '<details class="sect"><summary>👤 Моят профил</summary><div class="sect-body">' +
       '<div class="card"><div style="display:flex;align-items:center;gap:14px">' +
       avatarHtml(meU, 'xl') +
       '<div style="flex:1"><b style="font-size:17px">' + esc(meU ? meU.name : '') + '</b>' +
