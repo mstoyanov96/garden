@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.64.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.64.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -487,8 +487,17 @@
     route = { name: name, param: param || null };
     // добавя запис в историята, за да работи бутонът „назад“ / суайп жестът на iPhone вътре в приложението
     try { history.pushState({ route: route }, '', '#' + name + (param ? '/' + encodeURIComponent(param) : '')); } catch (err) {}
-    render(); window.scrollTo(0, 0);
     if (name === 'tree') resetViewportZoom(); // при отваряне на орех — върни картата от увеличението
+    render(); scrollTop0();
+  }
+
+  // надеждно връщане в началото на страницата след смяна на изглед; синхронното
+  // scrollTo понякога се пренебрегва заради scroll-anchoring на браузъра (когато идваме
+  // от скролната карта), затова го повтаряме и на следващия кадър
+  function scrollTop0() {
+    window.scrollTo(0, 0);
+    try { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (e) {}
+    requestAnimationFrame(function () { window.scrollTo(0, 0); });
   }
 
   // връща страницата от pinch-увеличението (когато работникът е зуумнал по картата, за да намери орех)
@@ -516,7 +525,7 @@
     if (route.name === 'walk') stopWalk();
     if (mapSelected.length) clearMapSelect();
     route = st || { name: db.currentUserId ? 'home' : 'login', param: null };
-    render(); window.scrollTo(0, 0);
+    render(); scrollTop0();
   });
 
   // =======================================================================
