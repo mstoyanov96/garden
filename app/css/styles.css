@@ -282,7 +282,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell .hlkg{font-size:9px;font-weight:800;line-height:1;padding:1px 4px;border-radius:7px;background:#f3b53c;color:#5a3d06;white-space:nowrap;}
 @keyframes hlpulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
 .map-hint{font-size:12px;color:var(--muted);background:var(--green-soft);border-radius:10px;padding:8px 10px;margin:4px 0 10px;}
-.map-tools-row{margin:4px 0 8px;}
+.map-tools-row{margin:4px 0 8px;display:flex;flex-direction:column;gap:8px;}
 .map-tools-row .btn{width:100%;}
 .pickbanner{background:var(--green-soft);border:2px solid var(--green);border-radius:12px;padding:12px;color:var(--green-dark);}
 .pickchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
@@ -422,6 +422,9 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .bottomnav .nav .ic{font-size:23px;line-height:1;width:48px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:12px;transition:background .15s;}
 .bottomnav .nav.active{color:var(--green-dark);font-weight:700;}
 .bottomnav .nav.active .ic{background:var(--green-soft);transform:translateY(-1px);}
+.bottomnav .nav .ic{position:relative;}
+.navbadge{position:absolute;top:1px;right:2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red,#e4572e);color:#fff;font-size:10px;font-weight:800;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--bg,#fff);box-sizing:border-box;}
+.list-row.unread{background:var(--green-soft);border-left:3px solid var(--green);}
 
 /* ---- FAB --------------------------------------------------------------- */
 .fab{position:fixed;right:calc(50% - 240px + 18px);bottom:calc(88px + env(safe-area-inset-bottom));z-index:55;width:60px;height:60px;border-radius:50%;

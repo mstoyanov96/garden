@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.67.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.68.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -64,6 +64,95 @@
   function me() { return db.users.find(function (u) { return u.id === db.currentUserId; }) || null; }
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
   function isOwner() { var m = me(); return m && (m.isOwner || m.id === db.ownerId); }
+
+  // ---- Известия / непрочетени записи в дневника --------------------------
+  // „Последно видяно" се пази локално на устройството, отделно за всеки потребител.
+  var logViewSeen = 0;          // стойност за подчертаване на непрочетените при отваряне на дневника
+  var _seenEventIds = null;     // кои event id-та вече сме виждали (за да известяваме само за новите)
+  function logSeenKey() { return 'walnut_logseen_' + (db.currentUserId || ''); }
+  function getLogSeen() { try { return parseInt(localStorage.getItem(logSeenKey()) || '0', 10) || 0; } catch (e) { return 0; } }
+  function setLogSeen(ts) { try { localStorage.setItem(logSeenKey(), String(ts)); } catch (e) {} }
+  // при първо влизане на даден потребител — приеми историята за „видяна", за да не свети цялата
+  function initLogSeen() { try { if (localStorage.getItem(logSeenKey()) === null) setLogSeen(Date.now()); } catch (e) {} }
+  function unreadLogCount() {
+    var seen = getLogSeen(), n = 0;
+    activeEvents().forEach(function (e) { if ((e.createdAt || 0) > seen && e.createdBy !== db.currentUserId) n++; });
+    return n;
+  }
+  function markLogOpened() { logViewSeen = getLogSeen(); setLogSeen(Date.now()); updateAppBadge(); }
+  // иконата на инсталираното приложение (ако средата поддържа Badging API) показва брой непрочетени
+  function updateAppBadge() {
+    var n = unreadLogCount();
+    try {
+      if (navigator.setAppBadge) { if (n > 0) navigator.setAppBadge(n); else if (navigator.clearAppBadge) navigator.clearAppBadge(); }
+    } catch (e) {}
+  }
+  function notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+  // засича нови (непознати) записи от ДРУГИ хора след синхронизация
+  function primeSeenEvents() { _seenEventIds = {}; (db.events || []).forEach(function (e) { if (e && e.id) _seenEventIds[e.id] = 1; }); }
+  function detectNewEvents() {
+    if (!_seenEventIds) { primeSeenEvents(); return []; }
+    var fresh = [];
+    (db.events || []).forEach(function (e) {
+      if (!e || !e.id || _seenEventIds[e.id]) return;
+      _seenEventIds[e.id] = 1;
+      if (!e.deletedAt && e.createdBy !== db.currentUserId) fresh.push(e);
+    });
+    return fresh;
+  }
+  function notifyNewEvents(list) {
+    var u = me();
+    if (!u || !u.notifyEnabled) return;
+    if (!notifSupported() || Notification.permission !== 'granted') return;
+    list.slice(0, 5).forEach(function (e) {
+      var m = LOG_TYPES[e.type] || { ic: '📜', t: e.type };
+      var who = db.users.find(function (x) { return x.id === e.createdBy; });
+      var t = e.treeId ? tree(e.treeId) : null;
+      var title = (m.ic || '📜') + ' ' + m.t + (t ? ' · ' + t.code : '');
+      var body = (who ? who.name : '') + (e.note ? ' — ' + e.note : '');
+      try { new Notification(title, { body: body, tag: e.id }); } catch (err) {}
+    });
+  }
+  // извиква се при пристигане на отдалечени промени — известява + обновява бройките
+  function onRemoteEvents() {
+    var fresh = detectNewEvents();
+    if (fresh.length) notifyNewEvents(fresh);
+    if (route.name === 'log') setLogSeen(Date.now()); // ако сме в дневника — не трупай непрочетени
+    updateAppBadge();
+  }
+  // извиква се щом знаем кой е влезлият потребител (вход/регистрация/зареждане)
+  function onUserReady() { initLogSeen(); primeSeenEvents(); updateAppBadge(); }
+  // UI за секцията „Известия" в Настройки
+  function notifSettingsHtml() {
+    var u = me();
+    if (!notifSupported()) {
+      return '<div class="chip orange">Този телефон/браузър не поддържа известия.</div>';
+    }
+    var perm = Notification.permission;
+    var on = !!(u && u.notifyEnabled) && perm === 'granted';
+    if (perm === 'denied') {
+      return '<div class="chip red">Известията са блокирани от настройките на телефона/браузъра. Разреши ги за тази страница, за да ги включиш.</div>';
+    }
+    return '<div class="kv"><span class="k">Известия на този телефон</span><span class="v">' +
+      '<button class="btn sm ' + (on ? '' : 'secondary') + '" data-action="toggnotif">' + (on ? '🔔 Включени' : '🔕 Изключени') + '</button>' +
+      '</span></div>';
+  }
+  function toggleNotif() {
+    var u = me();
+    if (!u || !notifSupported()) return;
+    var on = !!u.notifyEnabled && Notification.permission === 'granted';
+    if (on) { u.notifyEnabled = false; save(); render(); return; }
+    // включване → искаме разрешение от системата (ако това устройство още няма)
+    var apply = function (perm) {
+      if (perm === 'granted') { u.notifyEnabled = true; save(); try { new Notification('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); } catch (e) {} }
+      render();
+    };
+    if (Notification.permission === 'granted') { apply('granted'); return; }
+    try {
+      var r = Notification.requestPermission(apply);
+      if (r && typeof r.then === 'function') r.then(apply);
+    } catch (e) { render(); }
+  }
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
 
   // ---- Мащаб на целия интерфейс (запазва се на устройството, не се синхронизира) ----
@@ -248,6 +337,7 @@
     ev.deletedAt = null;
     ev.deletedBy = null;
     db.events.unshift(ev);
+    if (_seenEventIds) _seenEventIds[ev.id] = 1; // собствените записи не са „нови известия"
     save();
   }
   function softDelete(evId) {
@@ -490,6 +580,7 @@
     if (route.name === 'walk' && name !== 'walk') stopWalk();
     if (name !== 'home' && mapSelected.length) clearMapSelect();
     if (name === 'harvest') harvestScreen = 'none'; // екран „Действия“ се отваря без избран таб
+    if (name === 'log') markLogOpened(); // влизане в дневника → маркирай като видяно и махни бройката
     route = { name: name, param: param || null };
     // добавя запис в историята, за да работи бутонът „назад“ / суайп жестът на iPhone вътре в приложението
     try { history.pushState({ route: route }, '', '#' + name + (param ? '/' + encodeURIComponent(param) : '')); } catch (err) {}
@@ -614,6 +705,8 @@
     DB.save(db);
     if (fixed && window.Sync) window.Sync.push();
     if (changed || fixed) render();
+    primeSeenEvents();   // след първоначалното зареждане приемаме всичко за видяно
+    updateAppBadge();
   }
   // подпис на колекция, нечувствителен към реда на записите
   function colSig(arr) {
@@ -625,7 +718,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { var fixed = normalizeZones(); DB.migratePhotos(db); DB.save(db); if (fixed && window.Sync) window.Sync.push(); if (!isSheetOpen()) render(); },
+      onRemote: function () { var fixed = normalizeZones(); DB.migratePhotos(db); DB.save(db); if (fixed && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
@@ -660,7 +753,9 @@
     ];
     return '<div class="bottomnav">' + items.map(function (i) {
       var active = (route.name === i.k || (i.k === 'sales' && route.name === 'buyer')) ? ' active' : '';
-      return '<div class="nav' + active + '" data-action="nav:' + i.k + '"><span class="ic">' + i.ic + '</span>' + i.t + '</div>';
+      var badge = '';
+      if (i.k === 'log') { var n = unreadLogCount(); if (n > 0) badge = '<span class="navbadge">' + (n > 99 ? '99+' : n) + '</span>'; }
+      return '<div class="nav' + active + '" data-action="nav:' + i.k + '"><span class="ic">' + i.ic + badge + '</span>' + i.t + '</div>';
     }).join('') + '</div>';
   }
 
@@ -1060,7 +1155,7 @@
       return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '><div class="ic harvest">⚪</div>' +
         '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
-        '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' +
+        (isAdmin() ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' : '') +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
@@ -1090,7 +1185,7 @@
         return '<div class="card" style="margin-top:8px"><div class="kv"><span class="k">⚪ Среден дял бели (ползва се за „очаквано")</span><span class="v"><b>' + (avg != null ? Math.round(avg * 100) + '%' : '—') + '</b></span></div>' +
           '<p class="muted" style="font-size:12px;margin:6px 0 0">' +
           (ai.count > 0
-            ? 'Изчислен от ' + ai.count + ' сортиране' + (ai.count === 1 ? '' : 'ия') + ' (⚪ ' + fmtKg(ai.white) + ' · ⚫ ' + fmtKg(ai.black) + ' кг). За всяко долу избери дали влиза в средното.'
+            ? 'Изчислен от ' + ai.count + ' сортиране' + (ai.count === 1 ? '' : 'ия') + ' (⚪ ' + fmtKg(ai.white) + ' · ⚫ ' + fmtKg(ai.black) + ' кг).' + (isAdmin() ? ' За всяко долу избери дали влиза в средното.' : '')
             : 'Няма избрани сортирания — ползва се калибровката „среден дял бели" от Настройки.') +
           '</p></div>';
       })() +
@@ -1303,7 +1398,8 @@
     var liked = reacts.indexOf(db.currentUserId) !== -1;
     var reactBtn = '<button class="heartbtn' + (liked ? ' on' : '') + '" data-action="react:' + e.id + '" aria-label="Реагирай със сърце">' +
       (liked ? '❤️' : '🤍') + (reacts.length ? ' <span class="hc">' + reacts.length + '</span>' : '') + '</button>';
-    return '<div class="list-row"' + (deleted ? ' style="opacity:.5"' : '') + '>' +
+    var fresh = !deleted && (e.createdAt || 0) > logViewSeen && e.createdBy !== db.currentUserId;
+    return '<div class="list-row' + (fresh ? ' unread' : '') + '"' + (deleted ? ' style="opacity:.5"' : '') + '>' +
       '<div class="ic ' + m.cls + '">' + m.ic + '</div>' +
       '<div class="tx"><b>' + m.t + scopeLbl + (deleted ? ' <span class="badge orange">изтрито</span>' : '') + '</b>' +
       '<small>' + detail + ' — ' + (who ? esc(who.name) : '?') + onBehalf + '</small>' +
@@ -1666,7 +1762,12 @@
       (isAdmin() ? '<button class="btn secondary mt" data-action="changemypass">🔑 Смени моята парола</button>' : '') +
       '</div></details>' +
 
-      '<details class="sect"><summary>🔍 Размер на изгледа</summary><div class="sect-body">' +
+      '<details class="sect"><summary>� Известия</summary><div class="sect-body">' +
+      '<div class="card"><p class="muted mb" style="font-size:13px">Получавай известие на този телефон, когато друг запише нещо в дневника (събиране, грижа, продажба и др.). Непрочетените се броят с червено балонче върху „📜 Дневник".</p>' +
+      notifSettingsHtml() +
+      '</div></div></details>' +
+
+      '<details class="sect"><summary>�🔍 Размер на изгледа</summary><div class="sect-body">' +
       '<div class="card"><p class="muted mb" style="font-size:13px">Уголеми или смали всичко в приложението, за да се чете по-лесно.</p>' +
       '<div class="row" style="align-items:center">' +
       '<button class="btn secondary" data-action="zoomout">➖ По-малко</button>' +
@@ -2305,7 +2406,7 @@
       case 'addclean': addCleanEntry(); break;
       case 'addshell': addShellEntry(); break;
       case 'addsort': addSortEntry(); break;
-      case 'sortavg': { var se = db.events.find(function (x) { return x.id === parts[1]; }); if (se) { se.excludeAvg = !se.excludeAvg; save(); render(); } break; }
+      case 'sortavg': { if (!isAdmin()) break; var se = db.events.find(function (x) { return x.id === parts[1]; }); if (se) { se.excludeAvg = !se.excludeAvg; save(); render(); } break; }
       case 'swbuck': captureSortInputs(); sortWhiteBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
       case 'sbbuck': captureSortInputs(); sortBlackBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
       case 'savewhiteblack': saveWhiteBlack(); break;
@@ -2330,6 +2431,7 @@
 
       case 'checkupdate': checkForUpdate(); break;
       case 'applyupdate': applyUpdate(); break;
+      case 'toggnotif': toggleNotif(); break;
 
       case 'closesheet': cancelTreeEdit(); closeSheet(); break;
     }
@@ -2343,7 +2445,7 @@
     var u = db.users.find(function (x) { return x.id === id; });
     if (!u) return;
     if (u.role === 'admin') { sheetAdminPassword(id); return; }
-    db.currentUserId = id; save(); go('home');
+    db.currentUserId = id; save(); onUserReady(); go('home');
   }
   function sheetAdminPassword(id) {
     var u = db.users.find(function (x) { return x.id === id; });
@@ -2358,7 +2460,7 @@
   function doAdminLogin(id) {
     var u = db.users.find(function (x) { return x.id === id; });
     var pass = el('admPass') ? el('admPass').value : '';
-    if (u && u.pass === DB.hashPw(pass)) { db.currentUserId = id; save(); closeSheet(); go('home'); }
+    if (u && u.pass === DB.hashPw(pass)) { db.currentUserId = id; save(); onUserReady(); closeSheet(); go('home'); }
     else { var er = el('admErr'); if (er) er.classList.remove('hidden'); }
   }
 
@@ -2366,7 +2468,7 @@
     var name = (el('newName').value || '').trim();
     if (!name) { el('newName').focus(); return; }
     var u = { id: DB.uid('u'), name: name, role: 'worker' };  // нови = работници
-    db.users.push(u); db.currentUserId = u.id; save(); go('home');
+    db.users.push(u); db.currentUserId = u.id; save(); onUserReady(); go('home');
   }
 
   // ---- Schema editor (admin) --------------------------------------------
@@ -3269,6 +3371,7 @@
   }
 
   if (db.currentUserId && route.name === 'login') route = { name: 'home', param: null };
+  if (db.currentUserId) onUserReady();
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   applyZoom();
   render();
