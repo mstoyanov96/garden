@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.73.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.74.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -826,12 +826,12 @@
       '<div class="stat green harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(greenBk) + '</b></div><small>кофи зелени ' + perLbl + '</small><small class="kg">≈ ' + fmtKg(hv.kg) + ' кг (без кофите)</small></div>' +
       '<div class="stat shelled harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(shelledBk) + '</b></div><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг (без кофите)</small></div>' +
       '</div>' +
-      '<div class="stat-period-wrap"><span class="ar" data-action="statstep:-1">‹</span>' +
+      '<div class="stat-period-wrap">' +
       '<select id="homePeriod" class="stat-period-sel">' +
       STAT_PERIODS.map(function (p) {
         return '<option value="' + p + '"' + (statPeriod === p ? ' selected' : '') + '>' + periodPill(p) + '</option>';
       }).join('') +
-      '</select><span class="ar" data-action="statstep:1">›</span></div>' +
+      '</select></div>' +
       '</div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + periodLong(statPeriod) +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
