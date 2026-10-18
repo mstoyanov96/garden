@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.66.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.67.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -433,10 +433,16 @@
     activeEvents().forEach(function (e) { if (e.type === 'sort') { white += (e.whiteKg || 0); black += (e.blackKg || 0); } });
     return { white: white, black: black, total: white + black };
   }
-  // какъв дял от изчистената ядка е бяла. Приоритет: реалното сортиране; иначе калибровката „средно от 1 кофа".
+  // само сортиранията, отбелязани да се броят за средния дял бели (excludeAvg !== true)
+  function sortAvgStats() {
+    var white = 0, black = 0, count = 0;
+    activeEvents().forEach(function (e) { if (e.type === 'sort' && !e.excludeAvg) { white += (e.whiteKg || 0); black += (e.blackKg || 0); count++; } });
+    return { white: white, black: black, total: white + black, count: count };
+  }
+  // какъв дял от изчистената ядка е бяла. Приоритет: избраните сортирания за средното; иначе калибровката „средно от 1 кофа".
   // връща null, ако още нищо не е въведено.
   function whitePct() {
-    var ss = sortStats();
+    var ss = sortAvgStats();
     if (ss.total > 0) return ss.white / ss.total;
     var s = db.settings;
     if (!s) return null;
@@ -1050,9 +1056,11 @@
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
-      return '<div class="list-row"><div class="ic harvest">⚪</div>' +
-        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+      var inAvg = !e.excludeAvg;
+      return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '><div class="ic harvest">⚪</div>' +
+        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
+        '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
@@ -1077,6 +1085,15 @@
       '<p class="muted" id="sbNet" style="font-size:13px;margin:0 0 8px"></p>' +
       '<button class="btn" data-action="addsort">➕ Запази сортираното</button>' +
       '</div>' +
+      (function () {
+        var avg = whitePct(); var ai = sortAvgStats();
+        return '<div class="card" style="margin-top:8px"><div class="kv"><span class="k">⚪ Среден дял бели (ползва се за „очаквано")</span><span class="v"><b>' + (avg != null ? Math.round(avg * 100) + '%' : '—') + '</b></span></div>' +
+          '<p class="muted" style="font-size:12px;margin:6px 0 0">' +
+          (ai.count > 0
+            ? 'Изчислен от ' + ai.count + ' сортиране' + (ai.count === 1 ? '' : 'ия') + ' (⚪ ' + fmtKg(ai.white) + ' · ⚫ ' + fmtKg(ai.black) + ' кг). За всяко долу избери дали влиза в средното.'
+            : 'Няма избрани сортирания — ползва се калибровката „среден дял бели" от Настройки.') +
+          '</p></div>';
+      })() +
       '<div class="section-title">Записи</div>' +
       '<div class="card">' + sortList + '</div>';
   }
@@ -1461,8 +1478,8 @@
     return topbar('Статистика', { back: 'nav:home' }) + '<div class="content">' +
       '<div class="stat-row">' +
       '<div class="stat green"><b>' + fmtKg(totalKg) + '</b><small>общо събрани (кг)</small></div>' +
-      '<div class="stat blue"><b>' + fmtKg(soldKg) + '</b><small>продадени (кг)</small></div>' +
-      '<div class="stat purple"><b>' + revenue.toFixed(0) + '</b><small>приходи (€)</small></div>' +
+      '<div class="stat blue" data-action="salesbreak" style="cursor:pointer"><b>' + fmtKg(soldKg) + '</b><small>продадени (кг)</small></div>' +
+      '<div class="stat purple" data-action="salesbreak" style="cursor:pointer"><b>' + revenue.toFixed(0) + '</b><small>приходи (€)</small></div>' +
       '</div>' +
 
       '<div class="section-title">🌰 Изчистена ядка (рандеман)</div>' +
@@ -1981,6 +1998,26 @@
     if (mw) mw.innerHTML = orchardGrid(el('fVar') ? el('fVar').value : '', el('fHealth') ? el('fHealth').value : '', editMode);
   }
 
+  // разбивка на продажбите (транзакции) — отваря се от плочките „продадени" и „приходи" в Статистика
+  function showSalesBreakdown() {
+    var sales = db.sales.slice().sort(function (a, b) { return b.date < a.date ? -1 : (b.date > a.date ? 1 : (b.createdAt || 0) - (a.createdAt || 0)); });
+    var totalKg = sales.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
+    var totalRev = sales.reduce(function (s, x) { return s + (x.total || 0); }, 0);
+    var rows = sales.length ? sales.map(function (s) {
+      var b = db.buyers.find(function (x) { return x.id === s.buyerId; });
+      return '<div class="list-row"><div class="ic harvest">💰</div>' +
+        '<div class="tx"><b>' + (b ? esc(b.name) : 'Купувач') + '</b>' +
+        '<small>' + fmtKg(s.kg || 0) + ' кг · ' + (s.pricePerKg || 0) + ' €/кг' + (s.note ? ' · ' + esc(s.note) : '') + '</small></div>' +
+        '<div class="meta"><b>' + (s.total || 0).toFixed(2) + ' €</b><div style="font-size:12px">' + fmtDate(s.date) + '</div></div></div>';
+    }).join('') : '<p class="muted">Още няма продажби.</p>';
+    openSheet('<h3>💰 Продажби (транзакции)</h3>' +
+      '<div class="card"><div class="kv"><span class="k">Общо продадени</span><span class="v"><b>' + fmtKg(totalKg) + ' кг</b></span></div>' +
+      '<div class="kv"><span class="k">Общо приходи</span><span class="v"><b>' + totalRev.toFixed(2) + ' €</b></span></div></div>' +
+      '<div class="section-title">Всички транзакции (' + sales.length + ')</div>' +
+      '<div class="card">' + rows + '</div>' +
+      '<button class="btn ghost mt" data-action="closesheet">Затвори</button>');
+  }
+
   // ---- Горни бройки: период „днес/седмица“ + разбивка по дървета ----------
   // текстови етикети за избрания период (днес / седмица / месец)
   function periodShort(p) { return p === 'week' ? '7д' : p === 'month' ? '30д' : p === 'year' ? '1г' : 'днес'; }
@@ -2150,6 +2187,7 @@
       case 'mapmode': mapMode = (parts[1] === 'harvest' ? 'harvest' : 'health'); try { localStorage.setItem(MAP_MODE_KEY, mapMode); } catch (e) {} render(); break;
       case 'statperiod': toggleStatPeriod(); break;
       case 'statbreak': showHarvestBreakdown(); break;
+      case 'salesbreak': showSalesBreakdown(); break;
       case 'statclear': harvestHL = null; render(); break;
       case 'statsmode':
         statsMode = (parts[1] === 'month' || parts[1] === 'weeks') ? parts[1] : 'season';
@@ -2267,6 +2305,7 @@
       case 'addclean': addCleanEntry(); break;
       case 'addshell': addShellEntry(); break;
       case 'addsort': addSortEntry(); break;
+      case 'sortavg': { var se = db.events.find(function (x) { return x.id === parts[1]; }); if (se) { se.excludeAvg = !se.excludeAvg; save(); render(); } break; }
       case 'swbuck': captureSortInputs(); sortWhiteBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
       case 'sbbuck': captureSortInputs(); sortBlackBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
       case 'savewhiteblack': saveWhiteBlack(); break;
