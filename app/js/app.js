@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.62.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.63.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -15,6 +15,9 @@
   var harvestFill = 100;      // колко пълни са кофите (%) — общо за събиране
   var groundBucket = '';     // избрана кофа при бързо събиране от земята
   var groundFill = 100;       // колко пълни са кофите (%) при събиране от земята
+  var sortWhiteBucket = '';  // '' = без кофа; иначе id на кофа, с която са теглени белите при сортиране
+  var sortBlackBucket = '';  // '' = без кофа; иначе id на кофа, с която са теглени черните при сортиране
+  var sortDraft = {};        // временно въведените стойности при сортиране (да не се губят при избор на кофа)
   var harvestState = 'green'; // в какъв вид са кофите: 'green' зелени | 'shelled' обелени с черупка | 'clean' чиста ядка
   var treeHarvestOpen = '';   // id на дърво с отворена вградена форма за събиране
   var treeDetailsOpen = false; // показани ли са подробните данни за дървото
@@ -1061,7 +1064,8 @@
       '<div class="card">' + list + '</div>';
   }
 
-  // таб „Сортиране" на екрана Събиране: попълване на бели/черни ядки за дата (без рандеман)
+  // таб „Сортиране" на екрана Събиране: попълване на бели/черни ядки за дата (без рандеман).
+  // Белите и черните може да се теглят с различна кофа (или без кофа) — тарата се вади отделно.
   function harvestSortForm() {
     var sortEntries = activeEvents().filter(function (e) { return e.type === 'sort'; })
       .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
@@ -1075,16 +1079,44 @@
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
+    var sd = sortDraft || {};
+    var wKg = sd.whiteKg != null ? sd.whiteKg : '';
+    var kKg = sd.blackKg != null ? sd.blackKg : '';
+    var wCnt = sd.whiteCount != null ? sd.whiteCount : '1';
+    var kCnt = sd.blackCount != null ? sd.blackCount : '1';
+    var sDate = sd.date || DB.todayISO();
     return '<div class="card" style="margin-top:4px">' +
-      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Сортирана</b> = изчистената ядка (без черупка), разделена на <b>бяла</b> и <b>черна</b>. Въведи колко кг от всяка за деня.</p>' +
-      '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="row">' +
-      '<div class="field"><label>⚪ Бели ядки (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
-      '<div class="field"><label>⚫ Черни ядки (кг)</label><input id="sortBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div></div>' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Сортирана</b> = изчистената ядка (без черупка), разделена на <b>бяла</b> и <b>черна</b>. Можеш да теглиш с кофа (тежестта ѝ се вади) или без кофа — поотделно за белите и за черните.</p>' +
+      '<div class="field"><label>Дата</label><input id="sortDate" class="input" type="date" value="' + sDate + '"/></div>' +
+      '<div class="section-title" style="margin-top:2px">⚪ Бели ядки</div>' +
+      '<div class="field"><label>Измерено тегло (кг)</label><input id="sortWhite" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + wKg + '"/></div>' +
+      '<div class="field"><label>Теглил си с кофа?</label>' + sortBucketPicker('white') + '</div>' +
+      (sortWhiteBucket ? '<div class="field"><label>Колко такива кофи</label><input id="sortWhiteCount" class="input" type="number" step="1" min="1" value="' + wCnt + '" inputmode="numeric"/></div>' : '') +
+      '<p class="muted" id="swNet" style="font-size:13px;margin:0 0 8px"></p>' +
+      '<div class="section-title" style="margin-top:2px">⚫ Черни ядки</div>' +
+      '<div class="field"><label>Измерено тегло (кг)</label><input id="sortBlack" class="input" type="number" step="0.1" min="0" inputmode="decimal" value="' + kKg + '"/></div>' +
+      '<div class="field"><label>Теглил си с кофа?</label>' + sortBucketPicker('black') + '</div>' +
+      (sortBlackBucket ? '<div class="field"><label>Колко такива кофи</label><input id="sortBlackCount" class="input" type="number" step="1" min="1" value="' + kCnt + '" inputmode="numeric"/></div>' : '') +
+      '<p class="muted" id="sbNet" style="font-size:13px;margin:0 0 8px"></p>' +
       '<button class="btn" data-action="addsort">➕ Запази сортираното</button>' +
       '</div>' +
       '<div class="section-title">Записи</div>' +
       '<div class="card">' + sortList + '</div>';
+  }
+
+  // избор на кофа по картинки за сортиране (с опция „Без кофа") — отделно за бели/черни
+  function sortBucketPicker(color) {
+    var isW = color === 'white';
+    var sel = isW ? sortWhiteBucket : sortBlackBucket;
+    var act = isW ? 'swbuck' : 'sbbuck';
+    var none = '<button class="bpick' + (sel === '' ? ' active' : '') + '" data-action="' + act + ':none">' +
+      '<span class="bpic">🚫</span><b>Без кофа</b><small>само ядка</small></button>';
+    var tiles = db.settings.buckets.map(function (b) {
+      return '<button class="bpick' + (sel === b.id ? ' active' : '') + '" data-action="' + act + ':' + b.id + '">' +
+        '<span class="bpic">' + bucketIcon(b) + '</span>' +
+        '<b>' + esc(b.name) + '</b><small>празна ' + (b.tareKg != null ? fmtKg(b.tareKg) + ' кг' : '0') + '</small></button>';
+    }).join('');
+    return '<div class="bucketpick" style="flex-wrap:wrap">' + none + tiles + '</div>';
   }
 
   // таб „Обелени" на екрана Действия: въвеждане на обелени кофи (с черупка) за дата.
@@ -2081,6 +2113,7 @@
     var inp = e.target;
     if (!inp || !inp.getAttribute) return;
     if (inp.id === 'clKg' || inp.id === 'clCount') { updateCleanNet(); return; }
+    if (inp.id === 'sortWhite' || inp.id === 'sortBlack' || inp.id === 'sortWhiteCount' || inp.id === 'sortBlackCount') { updateSortNet(); return; }
     var key = inp.getAttribute('data-count');
     if (key == null) return;
     var v = parseFloat(String(inp.value).replace(',', '.'));
@@ -2245,6 +2278,8 @@
       case 'addclean': addCleanEntry(); break;
       case 'addshell': addShellEntry(); break;
       case 'addsort': addSortEntry(); break;
+      case 'swbuck': captureSortInputs(); sortWhiteBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
+      case 'sbbuck': captureSortInputs(); sortBlackBucket = parts[1] === 'none' ? '' : parts[1]; render(); break;
       case 'savewhiteblack': saveWhiteBlack(); break;
 
       case 'varnew': sheetVarietyNew(); break;
@@ -3023,6 +3058,37 @@
     if (!bid) { out.innerHTML = ''; return; }
     out.innerHTML = 'Чиста ядка (без кофата): <b>' + fmtKg(cleanNetKg()) + ' кг</b>';
   }
+  // нетна сортирана ядка (бели/черни): измерено тегло − (тара на избраната кофа × брой кофи)
+  function sortNetKg(color) {
+    var isW = color === 'white';
+    var gross = parseFloat((el(isW ? 'sortWhite' : 'sortBlack') || {}).value) || 0;
+    var bid = isW ? sortWhiteBucket : sortBlackBucket;
+    var cnt = parseFloat((el(isW ? 'sortWhiteCount' : 'sortBlackCount') || {}).value) || 1;
+    var b = bid ? bucket(bid) : null;
+    var tare = b ? (b.tareKg || 0) * cnt : 0;
+    var net = gross - tare;
+    return net > 0 ? net : 0;
+  }
+  // запазва текущо въведеното при сортиране, за да не се губи при избор на кофа (re-render)
+  function captureSortInputs() {
+    sortDraft = {
+      date: (el('sortDate') && el('sortDate').value) || '',
+      whiteKg: (el('sortWhite') && el('sortWhite').value) || '',
+      blackKg: (el('sortBlack') && el('sortBlack').value) || '',
+      whiteCount: (el('sortWhiteCount') && el('sortWhiteCount').value) || '1',
+      blackCount: (el('sortBlackCount') && el('sortBlackCount').value) || '1'
+    };
+  }
+  function updateSortNet() {
+    ['white', 'black'].forEach(function (c) {
+      var isW = c === 'white';
+      var out = el(isW ? 'swNet' : 'sbNet'); if (!out) return;
+      var bid = isW ? sortWhiteBucket : sortBlackBucket;
+      var gross = parseFloat((el(isW ? 'sortWhite' : 'sortBlack') || {}).value) || 0;
+      if (!bid || !(gross > 0)) { out.innerHTML = ''; return; }
+      out.innerHTML = (isW ? '⚪ Бели' : '⚫ Черни') + ' без кофата: <b>' + fmtKg(sortNetKg(c)) + ' кг</b>';
+    });
+  }
   // обелени (с черупка): записва реално обелените кофи за дата (надделява над авто-сметката)
   function addShellEntry() {
     var v = parseFloat(el('shBuckets').value);
@@ -3036,13 +3102,16 @@
   }
   // сортиране (4-ти процес): записва реално бели и черни ядки за дадена дата
   function addSortEntry() {
-    var w = parseFloat(el('sortWhite').value);
-    var k = parseFloat(el('sortBlack').value);
-    if (!(w >= 0)) w = 0;
-    if (!(k >= 0)) k = 0;
-    if (w + k <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
+    var wg = parseFloat((el('sortWhite') || {}).value) || 0;
+    var kg = parseFloat((el('sortBlack') || {}).value) || 0;
+    if (wg <= 0 && kg <= 0) { alert('Въведи поне едно число по-голямо от 0.'); return; }
+    var w = sortNetKg('white');
+    var k = sortNetKg('black');
+    if (wg > 0 && !(w > 0)) { alert('При белите, след вадене на кофата остава 0 кг. Провери теглото и броя кофи.'); return; }
+    if (kg > 0 && !(k > 0)) { alert('При черните, след вадене на кофата остава 0 кг. Провери теглото и броя кофи.'); return; }
     var date = (el('sortDate') && el('sortDate').value) || DB.todayISO();
     addEvent({ type: 'sort', date: date, whiteKg: w, blackKg: k });
+    sortDraft = {}; sortWhiteBucket = ''; sortBlackBucket = '';
     render();
   }
   // запазва колко бели и колко черни ядки излизат от 1 кофа начупени (презаписва се)
