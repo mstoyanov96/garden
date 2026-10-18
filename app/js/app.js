@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.72.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.73.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -30,7 +30,8 @@
   var MAP_MODE_KEY = 'walnut_mapmode'; // пази се на устройството (не се синхронизира)
   var mapMode = (function () { try { return localStorage.getItem(MAP_MODE_KEY) === 'harvest' ? 'harvest' : 'health'; } catch (e) { return 'health'; } })();   // 'health' | 'harvest' — по какво се оцветяват дърветата на картата
   var STAT_PERIOD_KEY = 'walnut_statperiod'; // „днес“ или „седмица“ за горните бройки (пази се на устройството)
-  var statPeriod = (function () { try { var v = localStorage.getItem(STAT_PERIOD_KEY); return (v === 'week' || v === 'month' || v === 'year') ? v : 'today'; } catch (e) { return 'today'; } })();
+  var STAT_PERIODS = ['today', 'week', 'month', 'prevmonth', 'year']; // ред за дропдауна и ‹ › / суайп
+  var statPeriod = (function () { try { var v = localStorage.getItem(STAT_PERIOD_KEY); return STAT_PERIODS.indexOf(v) !== -1 ? v : 'today'; } catch (e) { return 'today'; } })();
   var statsMode = 'season'; // изглед на Статистика: 'season' | 'month' | 'weeks'
   var statsRef = null;      // Date-курсор за месец/седмици (кой месец / коя група седмици)
   var logFilterType = 'all'; // филтър на дневника по вид действие ('all' или тип събитие)
@@ -281,16 +282,22 @@
 
   // сумира събраното за период: 'today' = днес, 'week' = последните 7 дни.
   // връща { kg: общо зелени, perTree: {id:kg}, groundKg: от земята }
-  function harvestStats(period) {
+  function isoDate(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
+  // начална/крайна дата (вкл.) за период; 'prevmonth' = целият предходен календарен месец
+  function periodRange(period) {
     var today = DB.todayISO();
-    var cutoff = today;
-    if (period === 'week') { var d = new Date(); d.setDate(d.getDate() - 6); cutoff = d.toISOString().slice(0, 10); }
-    else if (period === 'month') { var dm = new Date(); dm.setDate(dm.getDate() - 29); cutoff = dm.toISOString().slice(0, 10); }
-    else if (period === 'year') { var dy = new Date(); dy.setDate(dy.getDate() - 364); cutoff = dy.toISOString().slice(0, 10); }
+    if (period === 'week') { var d = new Date(); d.setDate(d.getDate() - 6); return { start: isoDate(d), end: today }; }
+    if (period === 'month') { var dm = new Date(); dm.setDate(dm.getDate() - 29); return { start: isoDate(dm), end: today }; }
+    if (period === 'year') { var dy = new Date(); dy.setDate(dy.getDate() - 364); return { start: isoDate(dy), end: today }; }
+    if (period === 'prevmonth') { var n = new Date(); return { start: isoDate(new Date(n.getFullYear(), n.getMonth() - 1, 1)), end: isoDate(new Date(n.getFullYear(), n.getMonth(), 0)) }; }
+    return { start: today, end: today };
+  }
+  function harvestStats(period) {
+    var r = periodRange(period);
     var perTree = {}, perTreeBk = {}, groundKg = 0, groundBk = 0, totalKg = 0, totalBk = 0;
     activeEvents().forEach(function (e) {
       if (e.type !== 'harvest_tree' && e.type !== 'harvest_ground') return;
-      if (e.date < cutoff || e.date > today) return;
+      if (e.date < r.start || e.date > r.end) return;
       var k = eventKg(e); totalKg += k;
       var bk = greenCheeseBuckets(e); totalBk += bk;
       if (e.type === 'harvest_tree' && e.treeId) { perTree[e.treeId] = (perTree[e.treeId] || 0) + k; perTreeBk[e.treeId] = (perTreeBk[e.treeId] || 0) + bk; }
@@ -502,11 +509,10 @@
   // авто-сметката: за всяка събрана кофа зелено смятаме колко кофи за сирене е по обем (greenCheeseBuckets),
   // после × коефициент (shellYield) = обелени кофи за сирене; теглото е „С черупка" на кофата за сирене.
   function shelledStats(period) {
-    var today = DB.todayISO();
+    var r = periodRange(period);
     var days = [];
-    var span = period === 'week' ? 7 : period === 'month' ? 30 : period === 'year' ? 365 : 1;
-    for (var i = span - 1; i >= 0; i--) { var dd = new Date(); dd.setDate(dd.getDate() - i); days.push(dd.toISOString().slice(0, 10)); }
-    if (days.indexOf(today) === -1) days.push(today);
+    var cur = new Date(r.start + 'T00:00:00'), end = new Date(r.end + 'T00:00:00');
+    while (cur <= end) { days.push(isoDate(cur)); cur.setDate(cur.getDate() + 1); }
     var greenBkByDay = {};
     activeEvents().forEach(function (e) {
       if (e.type !== 'harvest_tree' && e.type !== 'harvest_ground') return;
@@ -822,7 +828,7 @@
       '</div>' +
       '<div class="stat-period-wrap"><span class="ar" data-action="statstep:-1">‹</span>' +
       '<select id="homePeriod" class="stat-period-sel">' +
-      ['today', 'week', 'month', 'year'].map(function (p) {
+      STAT_PERIODS.map(function (p) {
         return '<option value="' + p + '"' + (statPeriod === p ? ' selected' : '') + '>' + periodPill(p) + '</option>';
       }).join('') +
       '</select><span class="ar" data-action="statstep:1">›</span></div>' +
@@ -2150,23 +2156,23 @@
 
   // ---- Горни бройки: период „днес/седмица“ + разбивка по дървета ----------
   // текстови етикети за избрания период (днес / седмица / месец)
-  function periodShort(p) { return p === 'week' ? '7д' : p === 'month' ? '30д' : p === 'year' ? '1г' : 'днес'; }
-  function periodLong(p) { return p === 'week' ? 'тази седмица (7 дни)' : p === 'month' ? 'този месец (30 дни)' : p === 'year' ? 'тази година (365 дни)' : 'днес'; }
-  function periodPill(p) { return p === 'week' ? '🗓️ Тази седмица (7 дни)' : p === 'month' ? '📆 Този месец (30 дни)' : p === 'year' ? '🗓️ Тази година (365 дни)' : '📅 Днес'; }
+  function periodShort(p) { return p === 'week' ? '7д' : p === 'month' ? '30д' : p === 'prevmonth' ? 'мин. мес.' : p === 'year' ? '1г' : 'днес'; }
+  function periodLong(p) { return p === 'week' ? 'тази седмица (7 дни)' : p === 'month' ? 'този месец (30 дни)' : p === 'prevmonth' ? 'предходния месец' : p === 'year' ? 'тази година (365 дни)' : 'днес'; }
+  function periodPill(p) { return p === 'week' ? '🗓️ Тази седмица (7 дни)' : p === 'month' ? '📆 Този месец (30 дни)' : p === 'prevmonth' ? '📆 Предходен месец' : p === 'year' ? '🗓️ Тази година (365 дни)' : '📅 Днес'; }
 
   function setStatPeriod(p) {
-    statPeriod = (p === 'week' || p === 'month' || p === 'year') ? p : 'today';
+    statPeriod = STAT_PERIODS.indexOf(p) !== -1 ? p : 'today';
     try { localStorage.setItem(STAT_PERIOD_KEY, statPeriod); } catch (e) {}
     harvestHL = null; // смяната на период маха подчертаването
     render();
   }
-  function toggleStatPeriod() { setStatPeriod(statPeriod === 'today' ? 'week' : statPeriod === 'week' ? 'month' : statPeriod === 'month' ? 'year' : 'today'); }
-  // стъпка наляво/надясно по периодите (−1 = назад, +1 = напред)
-  var STAT_PERIOD_ORDER = ['today', 'week', 'month', 'year'];
+  function toggleStatPeriod() { stepStatPeriod(1); }
+  // стъпка наляво/надясно по периодите, циклично (−1 = назад, +1 = напред)
   function stepStatPeriod(dir) {
-    var idx = STAT_PERIOD_ORDER.indexOf(statPeriod); if (idx < 0) idx = 0;
-    var ni = Math.max(0, Math.min(STAT_PERIOD_ORDER.length - 1, idx + dir));
-    if (ni !== idx) setStatPeriod(STAT_PERIOD_ORDER[ni]);
+    var n = STAT_PERIODS.length;
+    var idx = STAT_PERIODS.indexOf(statPeriod); if (idx < 0) idx = 0;
+    var ni = ((idx + dir) % n + n) % n;
+    setStatPeriod(STAT_PERIODS[ni]);
   }
 
   // показва от кои дървета колко е събрано за избрания период и ги маркира на картата
