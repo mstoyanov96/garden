@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.78.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.79.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -577,12 +577,16 @@
     var expected = shelledKg * kernelYield();
     var actual = 0;
     activeEvents().forEach(function (e) { if (e.type === 'clean') actual += (e.kg || 0); });
+    var remaining = Math.max(0, expected - actual);
     var wp = whitePct();
     var ss = sortStats();
+    // оставащите бели = дялът бели × оставащото изчистено; очакваното бяло = вече сортирано + това
+    var remainingWhite = wp != null ? wp * remaining : null;
+    var expectedWhite = wp != null ? ss.white + remainingWhite : null;
     return {
-      expected: expected, actual: actual, remaining: Math.max(0, expected - actual),
+      expected: expected, actual: actual, remaining: remaining,
       whitePct: wp,
-      expectedWhite: wp != null ? expected * wp : null,
+      expectedWhite: expectedWhite, remainingWhite: remainingWhite,
       sortedWhite: ss.white, sortedBlack: ss.black, sortedTotal: ss.total
     };
   }
@@ -1608,7 +1612,7 @@
       (ks.whitePct != null
         ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
         : '') +
-      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
+      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг изчистено' + (ks.remainingWhite != null ? ' · ≈ ' + fmtKg(ks.remainingWhite) + ' кг бели' : '') + ' · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
@@ -3230,7 +3234,8 @@
       '<div class="kv"><span class="k">Изчистено досега</span><span class="v"><b>' + fmtKg(ks.actual) + ' кг</b></span></div>' +
       '<div class="kv"><span class="k">Остават</span><span class="v"><b>' + fmtKg(ks.remaining) + ' кг</b></span></div>' +
       (ks.whitePct != null
-        ? '<div class="kv"><span class="k">⚪ Бели ядки (' + Math.round(ks.whitePct * 100) + '%)</span><span class="v"><b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></span></div>'
+        ? '<div class="kv"><span class="k">⚪ Бели ядки (' + Math.round(ks.whitePct * 100) + '%)</span><span class="v"><b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></span></div>' +
+          '<div class="kv"><span class="k">⚪ Остават бели</span><span class="v"><b>' + fmtKg(ks.remainingWhite) + ' кг</b></span></div>'
         : '') +
       '<div class="kprog" style="margin-top:10px"><div class="kprog-fill" style="width:' + pct + '%"></div></div>' +
       '</div>' +
