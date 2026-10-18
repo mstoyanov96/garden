@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.61.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.62.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -32,6 +32,9 @@
   var statsRef = null;      // Date-курсор за месец/седмици (кой месец / коя група седмици)
   var logFilterType = 'all'; // филтър на дневника по вид действие ('all' или тип събитие)
   var logFilterUser = 'all'; // филтър на дневника по човек ('all' или id на потребител)
+  var yieldFilterFrom = '';  // филтър по дата за списъка с въведените рандемани (от)
+  var yieldFilterTo = '';    // филтър по дата за списъка с въведените рандемани (до)
+  var yieldSectionOpen = false; // дали секцията за рандемани в Настройки да е отворена след render
   var harvestHL = null;     // null или { id: kg } — подчертани дървета на картата (кой колко е дал)
   var statSuppressClick = false; // пропусни клика след суайп по бройките
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
@@ -424,6 +427,26 @@
     if (s && s.yieldInputKg > 0 && s.yieldOutputKg > 0) return s.yieldOutputKg / s.yieldInputKg;
     return 0.48;
   }
+  // всички записи за чистене с ръчно въведен рандеман (дроб 0..1), най-новите отгоре
+  function cleanYields() {
+    return activeEvents().filter(function (e) { return e.type === 'clean' && e.yield > 0; })
+      .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  }
+  // средният рандеман от всички въведени чистения, или null ако няма
+  function avgCleanYield() {
+    var ys = cleanYields();
+    if (!ys.length) return null;
+    return ys.reduce(function (s, e) { return s + e.yield; }, 0) / ys.length;
+  }
+  // ефективният рандеман по подразбиране:
+  //   ако е включена опцията → средното от ръчните въвеждания;
+  //   иначе — последното ръчно въведено; иначе — калкулаторът в Настройки
+  function defaultYield() {
+    var ys = cleanYields();
+    if (db.settings && db.settings.yieldUseAvg && ys.length) return avgCleanYield();
+    if (ys.length) return ys[0].yield;
+    return kernelYield();
+  }
   // сортиране (4-ти процес): сумира реално сортираните бели и черни ядки за сезона
   function sortStats() {
     var white = 0, black = 0;
@@ -459,7 +482,7 @@
   // обобщава изчистената ядка: очаквано (от рандемана), въведено досега и колко остава
   function kernelStats() {
     var shelledKg = totalShelledKg();
-    var expected = shelledKg * kernelYield();
+    var expected = shelledKg * defaultYield();
     var actual = 0;
     activeEvents().forEach(function (e) { if (e.type === 'clean') actual += (e.kg || 0); });
     var wp = whitePct();
@@ -1007,7 +1030,7 @@
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       return '<div class="list-row"><div class="ic harvest">🌰</div>' +
-        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (e.yield > 0 ? ' · рандеман ' + Math.round(e.yield * 100) + '%' : '') + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -1016,12 +1039,21 @@
       db.settings.buckets.map(function (b) {
         return '<option value="' + b.id + '">' + esc(b.name) + ' (кофа ' + (b.tareKg != null ? fmtKg(b.tareKg) + ' кг' : 'тара 0') + ')</option>';
       }).join('');
+    var defY = Math.round(defaultYield() * 100);
+    var hasY = cleanYields().length > 0;
+    var yHint = (db.settings.yieldUseAvg && hasY)
+      ? 'Показан е <b>средният</b> рандеман от въведените досега (' + defY + '%). Смени го, ако това чистене е различно.'
+      : (hasY
+        ? 'Показан е <b>последният въведен</b> рандеман (' + defY + '%). Смени го, ако това чистене е различно.'
+        : 'Показан е рандеманът от <b>Настройки</b> (' + defY + '%). Смени го, ако това чистене е различно.');
     return '<div class="card" style="margin-top:4px">' +
       '<p class="muted" style="font-size:12px;margin:0 0 8px"><b>Изчистена</b> = ядката без черупката (след като се счупи обеленият орех с черупка). Въведи колко кг чиста ядка изчисти за деня.</p>' +
       '<div class="field"><label>Дата</label><input id="clDate" class="input" type="date" value="' + DB.todayISO() + '"/></div>' +
       '<div class="field"><label>Измерено тегло (кг)</label><input id="clKg" class="input" type="number" step="0.1" min="0" inputmode="decimal"/></div>' +
       '<div class="field"><label>Теглил си с кофа? (ще се извади теглото ѝ)</label><select id="clBucket" class="input">' + bucketOpts + '</select></div>' +
       '<div class="field"><label>Колко такива кофи</label><input id="clCount" class="input" type="number" step="1" min="1" value="1" inputmode="numeric"/></div>' +
+      '<div class="field"><label>Рандеман за това чистене (%)</label><input id="clYield" class="input" type="number" step="1" min="1" max="100" inputmode="numeric" value="' + defY + '"/></div>' +
+      '<p class="muted" style="font-size:12px;margin:-4px 0 8px">' + yHint + '</p>' +
       '<p class="muted" id="clNet" style="font-size:13px;margin:0 0 8px"></p>' +
       '<button class="btn" data-action="addclean">➕ Запази изчистеното</button>' +
       '</div>' +
@@ -1423,7 +1455,7 @@
       (ks.whitePct != null
         ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
         : '') +
-      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
+      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг до очакваното · рандеман ' + Math.round(defaultYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
@@ -1498,6 +1530,23 @@
   // =======================================================================
   function viewSettings() {
     var s = db.settings;
+    // списък с всички въведени рандемани (по чистения), с филтър по дати
+    var allYields = cleanYields(); // най-новите отгоре
+    var fYields = allYields.filter(function (e) {
+      if (yieldFilterFrom && e.date < yieldFilterFrom) return false;
+      if (yieldFilterTo && e.date > yieldFilterTo) return false;
+      return true;
+    });
+    var yCap = 80;
+    var yShown = fYields.slice(0, yCap);
+    var avgY = avgCleanYield();
+    var avgFilteredY = fYields.length ? (fYields.reduce(function (a, e) { return a + e.yield; }, 0) / fYields.length) : null;
+    var yRows = yShown.length ? yShown.map(function (e) {
+      var who = db.users.find(function (u) { return u.id === e.createdBy; });
+      return '<div class="list-row"><div class="ic harvest">📐</div>' +
+        '<div class="tx"><b>' + Math.round(e.yield * 100) + '%</b><small>' + fmtKg(e.kg) + ' кг чиста' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta">' + fmtDate(e.date) + '</div></div>';
+    }).join('') : '<p class="muted">Няма въведени рандемани' + ((yieldFilterFrom || yieldFilterTo) ? ' за този период' : '') + '.</p>';
     return topbar('Настройки', { back: 'nav:home' }) + '<div class="content">' +
       '<details class="sect"><summary>☁️ Синхронизация</summary><div class="sect-body">' +
       '<div class="card"><div id="syncStatus">' + syncStatusHtml() + '</div>' +
@@ -1567,6 +1616,29 @@
           '<div class="kv"><span class="k">Изход — чиста ядка</span><span class="v">' + s.yieldOutputKg + ' кг</span></div>' +
           '<div class="center" style="font-size:20px;font-weight:800;color:var(--green-dark);margin-top:8px">Рандеман: ' +
           Math.round((s.yieldOutputKg / (s.yieldInputKg || 1)) * 100) + '%</div></div>') +
+      '</div></details>' +
+
+      '<details class="sect"' + (yieldSectionOpen ? ' open' : '') + '><summary>📊 Рандеман по чистения</summary><div class="sect-body">' +
+      '<p class="muted mb" style="font-size:13px">Всяко чистене записва своя рандеман. По подразбиране приложението показва последния въведен (или рандемана от калкулатора, ако още няма въведени). Включи опцията отдолу, за да ползва <b>средния</b> от всички въведени като подразбиране.</p>' +
+      '<div class="card">' +
+      '<div class="kv"><span class="k">Среден рандеман (' + allYields.length + ' чистения)</span><span class="v"><b>' + (avgY != null ? Math.round(avgY * 100) + '%' : '—') + '</b></span></div>' +
+      '<div class="kv"><span class="k">Ефективен по подразбиране</span><span class="v"><b>' + Math.round(defaultYield() * 100) + '%</b></span></div>' +
+      (isAdmin()
+        ? '<label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer"><input type="checkbox" ' + (s.yieldUseAvg ? 'checked' : '') + ' data-action="toggleyieldavg" style="width:18px;height:18px;flex:0 0 auto;accent-color:var(--green)"/> <span>Използвай средния рандеман като подразбиране</span></label>'
+        : '<p class="muted" style="font-size:12px;margin-top:8px">' + (s.yieldUseAvg ? 'Средният рандеман се ползва като подразбиране.' : 'Ползва се последният въведен рандеман.') + '</p>') +
+      '</div>' +
+      '<div class="section-title">Въведени стойности</div>' +
+      '<div class="card">' +
+      '<div class="row"><div class="field"><label>От дата</label><input id="yfFrom" class="input" type="date" value="' + yieldFilterFrom + '"/></div>' +
+      '<div class="field"><label>До дата</label><input id="yfTo" class="input" type="date" value="' + yieldFilterTo + '"/></div></div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn sm secondary" data-action="yieldfilter">🔎 Филтрирай</button>' +
+      ((yieldFilterFrom || yieldFilterTo) ? '<button class="btn sm ghost" data-action="yieldfilterclear">Изчисти</button>' : '') + '</div>' +
+      ((yieldFilterFrom || yieldFilterTo) && avgFilteredY != null
+        ? '<div class="kv"><span class="k">Среден за периода (' + fYields.length + ')</span><span class="v"><b>' + Math.round(avgFilteredY * 100) + '%</b></span></div>'
+        : '') +
+      (fYields.length > yCap ? '<p class="muted" style="font-size:12px;margin:2px 0 8px">Показани са първите ' + yCap + ' от ' + fYields.length + '. Стесни периода с филтъра отгоре.</p>' : '') +
+      yRows +
+      '</div>' +
       '</div></details>' +
 
       '<details class="sect"><summary>⚪ Среден дял бели (калибровка)</summary><div class="sect-body">' +
@@ -2163,6 +2235,9 @@
       case 'bucketsapply': applyBuckets(parts[1], parts[1] === 'from' ? (el('bkFromDate') && el('bkFromDate').value) : null); break;
       case 'bucketscancel': pendingBucketVals = null; closeSheet(); break;
       case 'savecalc': saveCalc(); break;
+      case 'toggleyieldavg': if (isAdmin()) { db.settings.yieldUseAvg = !db.settings.yieldUseAvg; yieldSectionOpen = true; save(); render(); } break;
+      case 'yieldfilter': yieldFilterFrom = (el('yfFrom') && el('yfFrom').value) || ''; yieldFilterTo = (el('yfTo') && el('yfTo').value) || ''; yieldSectionOpen = true; render(); break;
+      case 'yieldfilterclear': yieldFilterFrom = ''; yieldFilterTo = ''; yieldSectionOpen = true; render(); break;
       case 'saveshellyield': saveShellYield(); break;
       case 'saveshelled': saveShelledToday(); break;
       case 'clearshelled': clearShelledToday(); break;
@@ -2732,7 +2807,7 @@
     addEvent({ type: 'harvest_tree', treeId: id, date: date, state: harvestState, buckets: buckets, fill: harvestFill });
     delete harvestDraft[id];
     treeHarvestOpen = '';
-    render();
+    go('home');
   }
 
   function saveGps(id) {
@@ -2884,7 +2959,7 @@
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       return '<div class="list-row"><div class="ic harvest">🌰</div>' +
-        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (e.yield > 0 ? ' · рандеман ' + Math.round(e.yield * 100) + '%' : '') + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
         '<div class="meta">' + fmtDate(e.date) +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -2902,7 +2977,7 @@
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
     openSheet('<h3>🌰 Изчистена ядка (рандеман)</h3>' +
-      '<p class="muted mb" style="font-size:13px">Очакваното се смята от събраните обелени (с черупка) × рандеман <b>' + Math.round(kernelYield() * 100) + '%</b> (от калкулатора в Настройки).</p>' +
+      '<p class="muted mb" style="font-size:13px">Очакваното се смята от събраните обелени (с черупка) × рандеман <b>' + Math.round(defaultYield() * 100) + '%</b>' + (db.settings.yieldUseAvg && cleanYields().length ? ' (средното от въведените чистения)' : (cleanYields().length ? ' (последният въведен)' : ' (от калкулатора в Настройки)')) + '.</p>' +
       '<div class="card">' +
       '<div class="kv"><span class="k">Очаквано</span><span class="v"><b>' + fmtKg(ks.expected) + ' кг</b></span></div>' +
       '<div class="kv"><span class="k">Изчистено досега</span><span class="v"><b>' + fmtKg(ks.actual) + ' кг</b></span></div>' +
@@ -2925,7 +3000,9 @@
     var net = cleanNetKg();
     if (!(net > 0)) { alert('След вадене на кофите остава 0 кг. Провери теглото и броя кофи.'); return; }
     var date = (el('clDate') && el('clDate').value) || DB.todayISO();
-    addEvent({ type: 'clean', date: date, kg: net });
+    var yv = parseFloat((el('clYield') || {}).value);
+    var yfrac = (yv > 0) ? Math.min(1, yv / 100) : defaultYield();
+    addEvent({ type: 'clean', date: date, kg: net, yield: yfrac });
     render();
   }
   // пресмята нетна чиста ядка: измерено тегло − (тара на избраната кофа × брой кофи)
