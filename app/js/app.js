@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.83.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.84.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1146,9 +1146,9 @@
       .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
-      return '<div class="list-row"><div class="ic harvest">🌰</div>' +
+      return '<div class="list-row">' + avatarHtml(who, 'lg') +
         '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
-        '<div class="meta">' + fmtDate(e.date) +
+        '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
@@ -1249,9 +1249,9 @@
       .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
-      return '<div class="list-row"><div class="ic harvest">🥥</div>' +
+      return '<div class="list-row">' + avatarHtml(who, 'lg') +
         '<div class="tx"><b>' + fmtKg(e.buckets) + ' кофи</b><small>≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг обелени' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
-        '<div class="meta">' + fmtDate(e.date) +
+        '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени обелени.</p>';
@@ -3284,9 +3284,9 @@
       .sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 30);
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
-      return '<div class="list-row"><div class="ic harvest">🌰</div>' +
+      return '<div class="list-row">' + avatarHtml(who, 'lg') +
         '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
-        '<div class="meta">' + fmtDate(e.date) +
+        '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма въведени изчистени.</p>';
