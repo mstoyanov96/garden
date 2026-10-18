@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.71.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.72.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -815,15 +815,18 @@
     var shelledKg = sh.kg;
 
     return topbar('Орехова градина') + '<div class="content">' +
-      '<div class="stat-row" id="statSwipe">' +
+      '<div id="statSwipe">' +
+      '<div class="stat-row">' +
       '<div class="stat green harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(greenBk) + '</b></div><small>кофи зелени ' + perLbl + '</small><small class="kg">≈ ' + fmtKg(hv.kg) + ' кг (без кофите)</small></div>' +
       '<div class="stat shelled harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(shelledBk) + '</b></div><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг (без кофите)</small></div>' +
       '</div>' +
-      '<div class="stat-period-wrap"><select id="homePeriod" class="stat-period-sel">' +
+      '<div class="stat-period-wrap"><span class="ar" data-action="statstep:-1">‹</span>' +
+      '<select id="homePeriod" class="stat-period-sel">' +
       ['today', 'week', 'month', 'year'].map(function (p) {
         return '<option value="' + p + '"' + (statPeriod === p ? ' selected' : '') + '>' + periodPill(p) + '</option>';
       }).join('') +
-      '</select></div>' +
+      '</select><span class="ar" data-action="statstep:1">›</span></div>' +
+      '</div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + periodLong(statPeriod) +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
 
@@ -2158,6 +2161,13 @@
     render();
   }
   function toggleStatPeriod() { setStatPeriod(statPeriod === 'today' ? 'week' : statPeriod === 'week' ? 'month' : statPeriod === 'month' ? 'year' : 'today'); }
+  // стъпка наляво/надясно по периодите (−1 = назад, +1 = напред)
+  var STAT_PERIOD_ORDER = ['today', 'week', 'month', 'year'];
+  function stepStatPeriod(dir) {
+    var idx = STAT_PERIOD_ORDER.indexOf(statPeriod); if (idx < 0) idx = 0;
+    var ni = Math.max(0, Math.min(STAT_PERIOD_ORDER.length - 1, idx + dir));
+    if (ni !== idx) setStatPeriod(STAT_PERIOD_ORDER[ni]);
+  }
 
   // показва от кои дървета колко е събрано за избрания период и ги маркира на картата
   function showHarvestBreakdown() {
@@ -2210,10 +2220,7 @@
     function up(x) {
       if (!swiping) return;
       statSuppressClick = true; // да не отвори разбивка от същото докосване
-      var order = ['today', 'week', 'month', 'year'];
-      var idx = order.indexOf(statPeriod); if (idx < 0) idx = 0;
-      var ni = x < sx ? Math.min(idx + 1, order.length - 1) : Math.max(idx - 1, 0); // наляво = напред, надясно = назад
-      setStatPeriod(order[ni]);
+      stepStatPeriod(x < sx ? 1 : -1); // наляво = напред, надясно = назад
     }
     row.addEventListener('touchstart', function (e) { var t = e.touches[0]; down(t.clientX, t.clientY); }, { passive: true });
     row.addEventListener('touchmove', function (e) { var t = e.touches[0]; move(t.clientX, t.clientY); }, { passive: true });
@@ -2314,6 +2321,7 @@
         render(); break;
       case 'mapmode': mapMode = (parts[1] === 'harvest' ? 'harvest' : 'health'); try { localStorage.setItem(MAP_MODE_KEY, mapMode); } catch (e) {} render(); break;
       case 'statperiod': toggleStatPeriod(); break;
+      case 'statstep': stepStatPeriod(parseInt(parts[1], 10) || 0); break;
       case 'statbreak': showHarvestBreakdown(); break;
       case 'salesbreak': showSalesBreakdown(); break;
       case 'statclear': harvestHL = null; render(); break;
