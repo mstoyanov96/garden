@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.86.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.87.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -771,11 +771,9 @@
   function topbar(title, opts) {
     opts = opts || {};
     var m = me();
-    var n = opts.back ? 0 : unreadLogCount();
-    var brandBadge = n > 0 ? '<span class="logobadge">' + (n > 9 ? '9+' : n) + '</span>' : '';
     var left = opts.back
       ? '<button class="back" data-action="back">‹</button>'
-      : '<span class="brand' + (n > 0 ? ' hasnews' : '') + '" data-action="nav:log">' + logoSVG() + brandBadge + '</span>';
+      : '<span class="brand">' + logoSVG() + '</span>';
     return '<div class="topbar">' + left +
       (opts.back ? '<b style="font-size:19px">' + esc(title) + '</b>' : '<b style="font-size:19px">' + esc(title) + '</b>') +
       '<span class="spacer"></span>' +
