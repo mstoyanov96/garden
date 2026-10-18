@@ -72,8 +72,11 @@ img{max-width:100%;display:block;}
   padding-left:calc(16px + env(safe-area-inset-left));
   padding-right:calc(16px + env(safe-area-inset-right));
 }
-.topbar .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;}
+.topbar .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;position:relative;}
 .topbar .brand .logo{width:34px;height:34px;}
+.topbar .brand .logobadge{position:absolute;top:-3px;left:23px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red,#e4572e);color:#fff;font-size:10px;font-weight:800;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--card);box-sizing:border-box;}
+.topbar .brand.hasnews .logo{animation:newspulse 1.6s ease-in-out infinite;}
+@keyframes newspulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
 .topbar .spacer{flex:1;}
 .topbar .user{display:flex;align-items:center;gap:9px;}
 .topbar .user .nm{text-align:right;line-height:1.1;}
