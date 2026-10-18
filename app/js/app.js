@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.68.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.70.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -154,6 +154,12 @@
     } catch (e) { render(); }
   }
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
+  // аватар: профилна снимка ако има, иначе инициали
+  function avatarHtml(u, extraClass, attr) {
+    var cls = 'avatar' + (extraClass ? ' ' + extraClass : '');
+    if (u && u.photo) return '<span class="' + cls + ' hasphoto" style="background-image:url(' + u.photo + ')"' + (attr || '') + ' title="' + esc(u.name || '') + '"></span>';
+    return '<span class="' + cls + '"' + (attr || '') + ' title="' + esc(u ? (u.name || '') : '') + '">' + initials(u ? u.name : '?') + '</span>';
+  }
 
   // ---- Мащаб на целия интерфейс (запазва се на устройството, не се синхронизира) ----
   var UI_ZOOM_KEY = 'walnut_zoom';
@@ -739,7 +745,7 @@
       (opts.back ? '<b style="font-size:19px">' + esc(title) + '</b>' : '<b style="font-size:19px">' + esc(title) + '</b>') +
       '<span class="spacer"></span>' +
       '<div class="user"><div class="nm"><b>' + esc(m.name) + '</b><small>' + (m.role === 'admin' ? 'Администратор' : 'Работник') + '</small></div>' +
-      '<div class="avatar" data-action="settings">' + initials(m.name) + '</div></div></div>';
+      avatarHtml(m, '', ' data-action="settings"') + '</div></div>';
   }
 
   // ---- Bottom nav --------------------------------------------------------
@@ -772,7 +778,7 @@
       db.users.filter(function (u) { return !u.deletedAt; }).map(function (u) {
         var isAdm = u.role === 'admin';
         return '<button class="btn secondary mb" data-action="login:' + u.id + '" style="justify-content:space-between">' +
-          '<span><span class="avatar" style="display:inline-flex;vertical-align:middle;margin-right:10px">' + initials(u.name) + '</span>' + esc(u.name) + '</span>' +
+          '<span>' + avatarHtml(u, 'loginav') + esc(u.name) + '</span>' +
           '<span class="badge ' + (isAdm ? 'green' : 'orange') + '">' + (isAdm ? '🔒 Админ' : 'Работник') + '</span></button>';
       }).join('') + '</div>' +
       '<div class="section-title">Нов помагач</div>' +
@@ -809,9 +815,11 @@
       '<div class="stat green harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(greenBk) + '</b></div><small>кофи зелени ' + perLbl + '</small><small class="kg">≈ ' + fmtKg(hv.kg) + ' кг (без кофите)</small></div>' +
       '<div class="stat shelled harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(shelledBk) + '</b></div><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг (без кофите)</small></div>' +
       '</div>' +
-      '<div class="stat-period" data-action="statperiod"><span class="ar">‹</span><span class="pl">' +
-      periodPill(statPeriod) +
-      '</span><span class="ar">›</span></div>' +
+      '<div class="stat-period-wrap"><select id="homePeriod" class="stat-period-sel">' +
+      ['today', 'week', 'month', 'year'].map(function (p) {
+        return '<option value="' + p + '"' + (statPeriod === p ? ' selected' : '') + '>' + periodPill(p) + '</option>';
+      }).join('') +
+      '</select></div>' +
       (harvestHL ? '<div class="hl-banner">📍 Маркирани дърветата от „' + periodLong(statPeriod) +
         '" върху картата. <button class="btn sm ghost" data-action="statclear">✖ Махни</button></div>' : '') +
 
@@ -1400,9 +1408,9 @@
       (liked ? '❤️' : '🤍') + (reacts.length ? ' <span class="hc">' + reacts.length + '</span>' : '') + '</button>';
     var fresh = !deleted && (e.createdAt || 0) > logViewSeen && e.createdBy !== db.currentUserId;
     return '<div class="list-row' + (fresh ? ' unread' : '') + '"' + (deleted ? ' style="opacity:.5"' : '') + '>' +
-      '<div class="ic ' + m.cls + '">' + m.ic + '</div>' +
-      '<div class="tx"><b>' + m.t + scopeLbl + (deleted ? ' <span class="badge orange">изтрито</span>' : '') + '</b>' +
-      '<small>' + detail + ' — ' + (who ? esc(who.name) : '?') + onBehalf + '</small>' +
+      avatarHtml(who, 'lg') +
+      '<div class="tx"><b>' + m.ic + ' ' + m.t + scopeLbl + (deleted ? ' <span class="badge orange">изтрито</span>' : '') + '</b>' +
+      '<small>' + detail + onBehalf + '</small>' +
       '<div class="reacts">' + reactBtn + '</div></div>' +
       '<div class="meta">' + fmtDate(e.date) +
       (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
@@ -1478,8 +1486,10 @@
     function weekStart(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
     function isoLocal(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day; }
     var greenVals = [], shelledVals = [], cleanVals = [], whiteVals = [], blackVals = [], labels = [], periodTitle = '', barActions = null;
-    if (statsMode === 'month') {
-      var ref = statsRef || new Date();
+    if (statsMode === 'month' || statsMode === 'prevmonth') {
+      var ref = statsMode === 'prevmonth'
+        ? new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
+        : (statsRef || new Date());
       var my = ref.getFullYear(), mm = ref.getMonth();
       var dim = new Date(my, mm + 1, 0).getDate();
       greenVals = new Array(dim).fill(0); shelledVals = new Array(dim).fill(0); cleanVals = new Array(dim).fill(0); whiteVals = new Array(dim).fill(0); blackVals = new Array(dim).fill(0);
@@ -1589,10 +1599,11 @@
       '</div>' +
 
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
-      '<div class="seg"><button class="' + (statsMode === 'season' ? 'active' : '') + '" data-action="statsmode:season">📆 Сезон</button>' +
+      '<div class="seg seg4"><button class="' + (statsMode === 'season' ? 'active' : '') + '" data-action="statsmode:season">📆 Сезон</button>' +
       '<button class="' + (statsMode === 'month' ? 'active' : '') + '" data-action="statsmode:month">📅 Месец</button>' +
+      '<button class="' + (statsMode === 'prevmonth' ? 'active' : '') + '" data-action="statsmode:prevmonth">⬅️ Предх. месец</button>' +
       '<button class="' + (statsMode === 'weeks' || statsMode === 'oneweek' ? 'active' : '') + '" data-action="statsmode:weeks">🗓️ Седмици</button></div>' +
-      (statsMode !== 'season'
+      (statsMode !== 'season' && statsMode !== 'prevmonth'
         ? '<div class="stat-period"><span class="ar" data-action="statsprev">‹</span><span class="pl">' + periodTitle + '</span><span class="ar" data-action="statsnext">›</span></div>'
         : '<div class="stat-period" style="cursor:default"><span class="pl">' + periodTitle + '</span></div>') +
       (statsMode === 'weeks' ? '<p class="muted center" style="font-size:12px;margin:-4px 0 12px">👆 Натисни дадена седмица, за да видиш дните ѝ.</p>' : '') +
@@ -1660,7 +1671,18 @@
   // =======================================================================
   function viewSettings() {
     var s = db.settings;
+    var meU = me();
     return topbar('Настройки', { back: 'nav:home' }) + '<div class="content">' +
+      '<details class="sect" open><summary>👤 Моят профил</summary><div class="sect-body">' +
+      '<div class="card"><div style="display:flex;align-items:center;gap:14px">' +
+      avatarHtml(meU, 'xl') +
+      '<div style="flex:1"><b style="font-size:17px">' + esc(meU ? meU.name : '') + '</b>' +
+      '<div class="muted" style="font-size:13px">' + (meU && meU.role === 'admin' ? '🔒 Администратор' : 'Работник') + '</div></div></div>' +
+      '<div class="row mt"><button class="btn secondary" data-action="setphoto">📷 ' + (meU && meU.photo ? 'Смени снимката' : 'Добави снимка') + '</button>' +
+      (meU && meU.photo ? '<button class="btn ghost" data-action="delphoto">🗑️ Махни</button>' : '') + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0">Снимката се показва в дневника до всеки твой запис.</p>' +
+      '</div></div></details>' +
+
       '<details class="sect"><summary>☁️ Синхронизация</summary><div class="sect-body">' +
       '<div class="card"><div id="syncStatus">' + syncStatusHtml() + '</div>' +
       '<p class="muted" style="font-size:13px;margin-top:8px">Когато е включена, всички телефони виждат едни и същи дървета и събирания. Промените се сливат автоматично, дори да си бил офлайн.</p>' +
@@ -1753,7 +1775,7 @@
             : '<button class="btn sm" data-action="promote:' + u.id + '">Направи админ</button> <button class="btn sm ghost" style="border-color:#f3c9c6;color:#b23a33" data-action="deluser:' + u.id + '">Премахни</button>';
         }
         return '<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)">' +
-          '<span class="avatar" style="width:36px;height:36px;font-size:13px">' + initials(u.name) + '</span>' +
+          avatarHtml(u, 'sm') +
           '<div style="flex:1"><b>' + esc(u.name) + '</b>' + (owner ? ' 👑' : '') +
           '<div class="muted" style="font-size:12px">' + (u.role === 'admin' ? '🔒 Администратор' : 'Работник') + '</div></div>' +
           '<span class="badge ' + (u.role === 'admin' ? 'green' : 'orange') + '">' + (u.role === 'admin' ? 'Админ' : 'Работник') + '</span></div>' +
@@ -2251,6 +2273,7 @@
   });
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
+    if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
   });
 
   document.addEventListener('click', function (e) {
@@ -2291,7 +2314,7 @@
       case 'salesbreak': showSalesBreakdown(); break;
       case 'statclear': harvestHL = null; render(); break;
       case 'statsmode':
-        statsMode = (parts[1] === 'month' || parts[1] === 'weeks') ? parts[1] : 'season';
+        statsMode = (parts[1] === 'month' || parts[1] === 'prevmonth' || parts[1] === 'weeks') ? parts[1] : 'season';
         if (statsMode === 'month') statsRef = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         else if (statsMode === 'weeks') statsRef = new Date();
         else statsRef = null;
@@ -2432,6 +2455,8 @@
       case 'checkupdate': checkForUpdate(); break;
       case 'applyupdate': applyUpdate(); break;
       case 'toggnotif': toggleNotif(); break;
+      case 'setphoto': setProfilePhoto(); break;
+      case 'delphoto': delProfilePhoto(); break;
 
       case 'closesheet': cancelTreeEdit(); closeSheet(); break;
     }
@@ -2698,6 +2723,24 @@
       });
     };
     input.click();
+  }
+
+  // Профилна снимка на текущия потребител (малка, показва се в дневника)
+  function setProfilePhoto() {
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = function () {
+      var f = input.files[0]; if (!f) return;
+      resizeImage(f, 256, 0.82, function (dataUrl) {
+        var u = me(); if (!u) return;
+        u.photo = dataUrl; save(); render();
+      });
+    };
+    input.click();
+  }
+  function delProfilePhoto() {
+    var u = me(); if (!u) return;
+    u.photo = null; save(); render();
   }
 
   // Смалява снимката (макс. страна maxPx, JPEG качество q) → по-малък файл,
