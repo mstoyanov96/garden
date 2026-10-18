@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.87.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.88.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1629,7 +1629,7 @@
       '<div class="kernelhead"><span>Изчистено / очаквано</span><b>' + fmtKg(ks.actual) + ' / ' + fmtKg(ks.expected) + ' кг</b></div>' +
       '<div class="kprog"><div class="kprog-fill" style="width:' + kpct + '%"></div></div>' +
       (ks.whitePct != null
-        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '% бели</span></div>'
+        ? '<div class="kernelwhite">⚪ Бели ядки <span>' + Math.round(ks.whitePct * 100) + '% бели</span><b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b></div>'
         : '') +
       '<div class="kernelsub">' + (ks.expected > 0 ? '<div class="ks-rem">Остават <b>' + fmtKg(ks.remaining) + ' кг</b> изчистено' + (ks.remainingWhite != null ? ' · <b>' + fmtKg(ks.remainingWhite) + ' кг</b> бели' : '') + '</div><div class="ks-hint">рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане</div>' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
