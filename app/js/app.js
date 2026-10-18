@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.74.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.75.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -2291,6 +2291,25 @@
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
+  });
+
+  // Enter в поле (вкл. телефонната клавиатура): отиди на следващото поле или скрий клавиатурата
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.keyCode !== 13) return;
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT') return;
+    var type = (t.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'date' || type === 'checkbox' || type === 'radio' || type === 'button' || type === 'submit') return;
+    e.preventDefault();
+    var box = t.closest('.sheet, .content') || document.body;
+    var fields = [].slice.call(box.querySelectorAll('input, select, textarea')).filter(function (el) {
+      var ty = (el.getAttribute('type') || '').toLowerCase();
+      return !el.disabled && el.offsetParent !== null && ty !== 'hidden' && ty !== 'button' && ty !== 'submit';
+    });
+    var idx = fields.indexOf(t);
+    var next = idx > -1 ? fields[idx + 1] : null;
+    if (next && (next.getAttribute('type') || '').toLowerCase() !== 'date') { next.focus(); }
+    else { t.blur(); }
   });
 
   document.addEventListener('click', function (e) {
