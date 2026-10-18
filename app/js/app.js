@@ -1166,7 +1166,7 @@
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       return '<div class="list-row">' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -1199,7 +1199,7 @@
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       var inAvg = !e.excludeAvg;
       return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '>' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (inAvg ? '' : ' · извън средното') + '</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' : '') +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
@@ -1269,7 +1269,7 @@
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       return '<div class="list-row">' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b>' + fmtKg(e.buckets) + ' кофи</b><small>≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг обелени' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b>' + fmtKg(e.buckets) + ' кофи</b><small>≈ ' + fmtKg((e.buckets || 0) * refBucketShelledKg()) + ' кг обелени</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -3304,7 +3304,7 @@
     var list = entries.length ? entries.map(function (e) {
       var who = db.users.find(function (u) { return u.id === e.createdBy; });
       return '<div class="list-row">' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b>' + fmtKg(e.kg) + ' кг</b><small>изчистена ядка</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -3316,7 +3316,7 @@
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       return '<div class="list-row">' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
