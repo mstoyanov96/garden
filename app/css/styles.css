@@ -256,8 +256,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell .age.week{background:var(--yellow-soft);color:#9a6b11;}
 .tree-cell .age.old{background:#e7ece8;color:#6f7d73;}
 .tree-cell.sel .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));}
-.tree-cell.small-badge .svgwrap{background:#efeaff;border:2px solid #7c5cff;border-radius:50%;box-sizing:border-box;padding:3px;}
-.tree-cell.small-badge .code{background:#7c5cff;color:#fff;padding:1px 6px;border-radius:8px;}
+.tree-cell.small-badge .svgwrap{background:#f1ecfb;border:2px solid #b79af0;border-radius:50%;box-sizing:border-box;padding:3px;}
+.tree-cell.small-badge .code{background:#fff;color:#6a3fc0;border:1.5px solid #b79af0;padding:1px 6px;border-radius:8px;font-weight:800;}
 /* Български сорт — знаме (бяло/зелено/червено), меки тонове + зелен пръстен */
 .tree-cell.var-bg .svgwrap{border:2px solid #4cae82;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(#ffffff 0 33%,#9ed9ba 33% 66%,#f0a39c 66% 100%);}
 .tree-cell.var-bg .code{background:#fff;color:#1f7a52;border:1.5px solid #6fc29a;padding:1px 6px;border-radius:8px;font-weight:800;}

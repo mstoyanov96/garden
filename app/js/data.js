@@ -113,7 +113,6 @@
         yieldInputKg: 10,     // вход за рандеман (сухи с черупка)
         yieldOutputKg: 4.8,   // изход (чиста ядка)
         shellYield: 0.5,      // колко обелени кофи излизат от 1 зелена кофа
-        yieldUseAvg: false,   // да ползва ли средния рандеман от ръчните чистения като подразбиране
         zones: defaultZones()
       },
       users: users,
@@ -140,7 +139,6 @@
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
     if (db.settings && db.settings.zones) { var cp = db.settings.zones.filter(function (z) { return z.kind === 'coop' && z.label === 'Кокошки'; }); if (cp.length) { cp.forEach(function (z) { z.label = 'Кошита'; }); save(db); } }
     if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
-    if (db.settings && db.settings.yieldUseAvg == null) { db.settings.yieldUseAvg = false; save(db); }
     if (!db.photos) { db.photos = []; save(db); }
     return db;
   }
