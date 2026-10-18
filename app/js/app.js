@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.80.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.81.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -42,6 +42,7 @@
   var pendingBucketVals = null; // временно новите тегла на кофите, докато админът избере дали да преизчисли старите записи
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
+  var pendingPhotoSrc = null; // избраната профилна снимка, докато се наглася вертикално
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
   var syncStatus = 'off';   // 'off' | 'connecting' | 'on' | 'error' — състояние на облачната синхронизация
 
@@ -1610,7 +1611,7 @@
       '<div class="kernelhead"><span>Изчистено / очаквано</span><b>' + fmtKg(ks.actual) + ' / ' + fmtKg(ks.expected) + ' кг</b></div>' +
       '<div class="kprog"><div class="kprog-fill" style="width:' + kpct + '%"></div></div>' +
       (ks.whitePct != null
-        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
+        ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '% бели</span></div>'
         : '') +
       '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг изчистено' + (ks.remainingWhite != null ? '<br>≈ ' + fmtKg(ks.remainingWhite) + ' кг бели' : '') + ' · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
@@ -1696,7 +1697,7 @@
       '<div style="flex:1"><b style="font-size:17px">' + esc(meU ? meU.name : '') + '</b>' +
       '<div class="muted" style="font-size:13px">' + (meU && meU.role === 'admin' ? '🔒 Администратор' : 'Работник') + '</div></div></div>' +
       '<div class="row mt"><button class="btn secondary" data-action="setphoto">📷 ' + (meU && meU.photo ? 'Смени снимката' : 'Добави снимка') + '</button>' +
-      (meU && meU.photo ? '<button class="btn ghost" data-action="delphoto">🗑️ Махни</button>' : '') + '</div>' +
+      (meU && meU.photo ? '<button class="btn ghost" data-action="delprofilephoto">🗑️ Махни</button>' : '') + '</div>' +
       '<p class="muted" style="font-size:12px;margin:8px 0 0">Снимката се показва в дневника до всеки твой запис.</p>' +
       '</div></div></details>' +
 
@@ -2300,6 +2301,14 @@
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
   });
 
+  // жив преглед при наместване на профилната снимка нагоре/надолу
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'ppY') {
+      var prev = el('ppPrev');
+      if (prev) prev.style.backgroundPosition = '50% ' + (parseInt(e.target.value, 10) || 0) + '%';
+    }
+  });
+
   // Enter в поле (вкл. телефонната клавиатура): отиди на следващото поле или скрий клавиатурата
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -2500,7 +2509,8 @@
       case 'applyupdate': applyUpdate(); break;
       case 'toggnotif': toggleNotif(); break;
       case 'setphoto': setProfilePhoto(); break;
-      case 'delphoto': delProfilePhoto(); break;
+      case 'delprofilephoto': delProfilePhoto(); break;
+      case 'savephotoadj': saveProfilePhotoAdjust(); break;
 
       case 'closesheet': cancelTreeEdit(); closeSheet(); break;
     }
@@ -2775,16 +2785,56 @@
     input.type = 'file'; input.accept = 'image/*';
     input.onchange = function () {
       var f = input.files[0]; if (!f) return;
-      resizeImage(f, 256, 0.82, function (dataUrl) {
-        var u = me(); if (!u) return;
-        u.photo = dataUrl; save(); render();
+      resizeImage(f, 640, 0.85, function (dataUrl) {
+        pendingPhotoSrc = dataUrl;
+        openPhotoAdjust();
       });
     };
     input.click();
   }
+  // екран за наместване на снимката нагоре/надолу (за да се центрира лицето)
+  function openPhotoAdjust() {
+    if (!pendingPhotoSrc) return;
+    openSheet('<h3>📷 Нагласи снимката</h3>' +
+      '<p class="muted mb" style="font-size:13px">Плъзни, за да центрираш лицето в кръга.</p>' +
+      '<div id="ppPrev" class="pp-prev" style="background-image:url(' + pendingPhotoSrc + ');background-position:50% 50%"></div>' +
+      '<div class="field"><label>Нагоре / надолу</label><input id="ppY" class="input" type="range" min="0" max="100" value="50"/></div>' +
+      '<button class="btn" data-action="savephotoadj">💾 Запази</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+  }
+  function saveProfilePhotoAdjust() {
+    if (!pendingPhotoSrc) { closeSheet(); return; }
+    var yEl = el('ppY');
+    var offsetY = yEl ? (parseInt(yEl.value, 10) || 0) / 100 : 0.5;
+    cropSquare(pendingPhotoSrc, offsetY, 256, 0.82, function (dataUrl) {
+      var u = me(); if (!u) { closeSheet(); return; }
+      u.photo = dataUrl; pendingPhotoSrc = null; save(); closeSheet(); render();
+    });
+  }
   function delProfilePhoto() {
     var u = me(); if (!u) return;
     u.photo = null; save(); render();
+  }
+
+  // изрязва снимката в квадрат (center по хоризонтала, offsetY 0..1 по вертикала) → квадратна снимка
+  function cropSquare(src, offsetY, out, q, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var w = img.width, h = img.height;
+      var scale = Math.max(out / w, out / h);
+      var sw = w * scale, sh = h * scale;
+      var dx = (out - sw) / 2;
+      var dy = (out - sh) * offsetY;
+      try {
+        var c = document.createElement('canvas'); c.width = out; c.height = out;
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#e9eee9'; ctx.fillRect(0, 0, out, out);
+        ctx.drawImage(img, dx, dy, sw, sh);
+        cb(c.toDataURL('image/jpeg', q));
+      } catch (e) { cb(src); }
+    };
+    img.onerror = function () { cb(src); };
+    img.src = src;
   }
 
   // Смалява снимката (макс. страна maxPx, JPEG качество q) → по-малък файл,

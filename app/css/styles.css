@@ -464,6 +464,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 @keyframes slideup{from{transform:translateY(40px);opacity:.6;}to{transform:none;opacity:1;}}
 .sheet .grip{width:44px;height:5px;border-radius:3px;background:#dfe5e0;margin:0 auto 14px;}
 .sheet h3{font-size:19px;font-weight:800;margin-bottom:14px;}
+.pp-prev{width:220px;height:220px;max-width:70vw;max-height:70vw;margin:0 auto 14px;border-radius:50%;background-size:cover;background-repeat:no-repeat;box-shadow:0 2px 10px rgba(0,0,0,.18);border:3px solid #fff;}
 
 /* ---- Login ------------------------------------------------------------- */
 .login{min-height:100vh;display:flex;flex-direction:column;}
