@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.82.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.83.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -43,6 +43,7 @@
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
   var pendingPhotoSrc = null; // избраната профилна снимка, докато се наглася вертикално
+  var ppImgW = 0, ppImgH = 0; // размери на избраната снимка (за наместване: зуум + местене)
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
   var syncStatus = 'off';   // 'off' | 'connecting' | 'on' | 'error' — състояние на облачната синхронизация
 
@@ -2301,11 +2302,10 @@
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
   });
 
-  // жив преглед при наместване на профилната снимка нагоре/надолу
+  // жив преглед при наместване на профилната снимка (зуум + местене наляво/надясно/горе/долу)
   document.addEventListener('input', function (e) {
-    if (e.target && e.target.id === 'ppY') {
-      var im = el('ppImg');
-      if (im) im.style.objectPosition = '50% ' + (parseInt(e.target.value, 10) || 0) + '%';
+    if (e.target && (e.target.id === 'ppZoom' || e.target.id === 'ppX' || e.target.id === 'ppY')) {
+      updatePhotoPreview();
     }
   });
 
@@ -2792,21 +2792,43 @@
     };
     input.click();
   }
-  // екран за наместване на снимката нагоре/надолу (за да се центрира лицето)
+  // екран за наместване на снимката (зуум + местене наляво/надясно/горе/долу)
   function openPhotoAdjust() {
     if (!pendingPhotoSrc) return;
+    ppImgW = 0; ppImgH = 0;
     openSheet('<h3>📷 Нагласи снимката</h3>' +
-      '<p class="muted mb" style="font-size:13px">Плъзни, за да центрираш лицето в кръга.</p>' +
+      '<p class="muted mb" style="font-size:13px">Нагласи с плъзгачите, за да центрираш лицето в кръга.</p>' +
       '<div id="ppPrev" class="pp-prev"><img id="ppImg" src="' + pendingPhotoSrc + '" alt=""/></div>' +
-      '<div class="field"><label>Нагоре / надолу</label><input id="ppY" class="input" type="range" min="0" max="100" value="50"/></div>' +
+      '<div class="field"><label>🔍 Увеличение</label><input id="ppZoom" class="input" type="range" min="100" max="300" value="100"/></div>' +
+      '<div class="field"><label>↔️ Наляво / надясно</label><input id="ppX" class="input" type="range" min="0" max="100" value="50"/></div>' +
+      '<div class="field"><label>↕️ Нагоре / надолу</label><input id="ppY" class="input" type="range" min="0" max="100" value="50"/></div>' +
       '<button class="btn" data-action="savephotoadj">💾 Запази</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+    var probe = new Image();
+    probe.onload = function () { ppImgW = probe.width; ppImgH = probe.height; updatePhotoPreview(); };
+    probe.src = pendingPhotoSrc;
+  }
+  // жив преглед: позиционира снимката според плъзгачите (моделът е същият като в cropSquare)
+  function updatePhotoPreview() {
+    var im = el('ppImg'); if (!im || !ppImgW || !ppImgH) return;
+    var zEl = el('ppZoom'), xEl = el('ppX'), yEl = el('ppY');
+    var z = zEl ? (parseInt(zEl.value, 10) || 100) / 100 : 1; if (z < 1) z = 1;
+    var ox = xEl ? (parseInt(xEl.value, 10) || 0) / 100 : 0.5;
+    var oy = yEl ? (parseInt(yEl.value, 10) || 0) / 100 : 0.5;
+    var base = Math.min(ppImgW, ppImgH);
+    var crop = base / z; // колко изходни пиксела се виждат = 100% от кръга
+    im.style.width = (ppImgW / crop * 100) + '%';
+    im.style.height = (ppImgH / crop * 100) + '%';
+    im.style.left = (-(ppImgW / crop - 1) * ox * 100) + '%';
+    im.style.top = (-(ppImgH / crop - 1) * oy * 100) + '%';
   }
   function saveProfilePhotoAdjust() {
     if (!pendingPhotoSrc) { closeSheet(); return; }
-    var yEl = el('ppY');
+    var zEl = el('ppZoom'), xEl = el('ppX'), yEl = el('ppY');
+    var zoom = zEl ? (parseInt(zEl.value, 10) || 100) / 100 : 1; if (zoom < 1) zoom = 1;
+    var offsetX = xEl ? (parseInt(xEl.value, 10) || 0) / 100 : 0.5;
     var offsetY = yEl ? (parseInt(yEl.value, 10) || 0) / 100 : 0.5;
-    cropSquare(pendingPhotoSrc, offsetY, 256, 0.82, function (dataUrl) {
+    cropSquare(pendingPhotoSrc, zoom, offsetX, offsetY, 256, 0.82, function (dataUrl) {
       var u = me(); if (!u) { closeSheet(); return; }
       u.photo = dataUrl; pendingPhotoSrc = null; save(); closeSheet(); render();
     });
@@ -2816,20 +2838,20 @@
     u.photo = null; save(); render();
   }
 
-  // изрязва снимката в квадрат (center по хоризонтала, offsetY 0..1 по вертикала) → квадратна снимка
-  function cropSquare(src, offsetY, out, q, cb) {
+  // изрязва квадрат от снимката: zoom (>=1), offsetX/offsetY 0..1 → квадратна снимка
+  function cropSquare(src, zoom, offsetX, offsetY, out, q, cb) {
     var img = new Image();
     img.onload = function () {
       var w = img.width, h = img.height;
-      var scale = Math.max(out / w, out / h);
-      var sw = w * scale, sh = h * scale;
-      var dx = (out - sw) / 2;
-      var dy = (out - sh) * offsetY;
+      var base = Math.min(w, h);
+      var crop = base / (zoom > 1 ? zoom : 1);
+      var sx = (w - crop) * offsetX;
+      var sy = (h - crop) * offsetY;
       try {
         var c = document.createElement('canvas'); c.width = out; c.height = out;
         var ctx = c.getContext('2d');
         ctx.fillStyle = '#e9eee9'; ctx.fillRect(0, 0, out, out);
-        ctx.drawImage(img, dx, dy, sw, sh);
+        ctx.drawImage(img, sx, sy, crop, crop, 0, 0, out, out);
         cb(c.toDataURL('image/jpeg', q));
       } catch (e) { cb(src); }
     };
