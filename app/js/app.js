@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.79.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.80.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1178,8 +1178,8 @@
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       var inAvg = !e.excludeAvg;
       return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '><div class="ic harvest">⚪</div>' +
-        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
-        '<div class="meta">' + fmtDate(e.date) +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + (inAvg ? '' : ' · извън средното') + '</small></div>' +
+        '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' : '') +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
@@ -1612,7 +1612,7 @@
       (ks.whitePct != null
         ? '<div class="kernelwhite">⚪ Бели ядки <b>' + fmtKg(ks.sortedWhite) + ' / ' + fmtKg(ks.expectedWhite) + ' кг</b><span>' + Math.round(ks.whitePct * 100) + '%</span></div>'
         : '') +
-      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг изчистено' + (ks.remainingWhite != null ? ' · ≈ ' + fmtKg(ks.remainingWhite) + ' кг бели' : '') + ' · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
+      '<div class="kernelsub">' + (ks.expected > 0 ? 'Остават ≈ ' + fmtKg(ks.remaining) + ' кг изчистено' + (ks.remainingWhite != null ? '<br>≈ ' + fmtKg(ks.remainingWhite) + ' кг бели' : '') + ' · рандеман ' + Math.round(kernelYield() * 100) + '% · натисни за въвеждане' : 'Събери и обели, за да се сметне очакваното') + '</div>' +
       '</div>' +
 
       '<p class="muted mb" style="font-size:13px;margin-top:16px">Добив по етапи. Всеки етап показва общото и колко процент е от предишния.</p>' +
@@ -1975,12 +1975,15 @@
   // =======================================================================
   //  SHEETS (modals)
   // =======================================================================
-  function openSheet(html) {
+  function openSheet(html, peek) {
     var s = el('sheet');
+    var wasPeek = s.classList.contains('open') && s.classList.contains('peek');
     s.innerHTML = '<div class="sheet"><div class="grip"></div>' + html + '</div>';
+    s.classList.toggle('peek', !!peek); // при редакция — прозрачен фон, за да се вижда картата отзад
     s.classList.add('open');
+    if (peek && !wasPeek) { try { var mw = el('mapwrap'); if (mw) mw.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} }
   }
-  function closeSheet() { el('sheet').classList.remove('open'); el('sheet').innerHTML = ''; }
+  function closeSheet() { var s = el('sheet'); s.classList.remove('open'); s.classList.remove('peek'); s.innerHTML = ''; }
 
   // ---- Сортове (само админ; промените се синхронизират за всички) ----
   function sheetVarietyNew() {
@@ -2577,7 +2580,7 @@
       '</div></div>' +
       '<button class="btn" data-action="savetree:' + id + '">💾 Запази</button>' +
       '<button class="btn danger mt" data-action="deltree:' + id + '">🗑️ Изтрий дървото</button>' +
-      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>', true);
   }
   function occupied(row, col, exceptId) {
     return db.trees.some(function (t) { return !t.deletedAt && t.row === row && t.col === col && t.id !== exceptId; });
@@ -2625,7 +2628,7 @@
       '<button class="btn secondary" data-action="sizezone:' + id + ':hminus">− по-ниско</button>' +
       '<button class="btn secondary" data-action="sizezone:' + id + ':hplus">по-високо +</button></div></div>' +
       '<button class="btn danger mt" data-action="delzone:' + id + '">🗑️ Изтрий зоната</button>' +
-      '<button class="btn ghost mt" data-action="closesheet">Готово</button>');
+      '<button class="btn ghost mt" data-action="closesheet">Готово</button>', true);
   }
 
   function moveZone(id, dir) {
@@ -3222,8 +3225,8 @@
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       return '<div class="list-row"><div class="ic harvest">⚪</div>' +
-        '<div class="tx"><b>⚪ ' + fmtKg(e.whiteKg || 0) + ' · ⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
-        '<div class="meta">' + fmtDate(e.date) +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (who ? ' · ' + esc(who.name) : '') + '</small></div>' +
+        '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';
     }).join('') : '<p class="muted">Още няма сортирани.</p>';
