@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.98.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.98.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1118,7 +1118,7 @@
       (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar">' + varietyOptions('', '') + '</select>' +
-        (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
+        (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
         '</div>') +
       (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button>' +
         '<button class="btn sm secondary" data-action="groundquick">🍂 Събери от земята</button></div>') +
