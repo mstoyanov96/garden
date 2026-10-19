@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.98.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.98.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1507,6 +1507,7 @@
         : '<p class="muted" style="font-size:12px;margin:0 0 8px">Когато събереш зелено за даден ден, приложението само пресмята колко кофи обелени се очакват (зелените × коефициента <b>' + fmtKg(shellYield()) + '</b> — толкова кофи обелени излизат от 1 кофа зелени) и ги попълва автоматично в полето отдолу за същата дата. Днес още няма събрано зелено, затова полето е празно — избери дата и въведи колко кофи за сирене реално обели.</p>') +
       '<div class="field"><label>Дата</label><input id="shDate" class="input" type="date" value="' + today + '"/></div>' +
       '<div class="field"><label>Обелени кофи за сирене (с черупка)</label><input id="shBuckets" class="input" type="number" step="0.25" min="0" inputmode="decimal" value="' + prefill + '"/></div>' +
+      '<p class="muted" style="font-size:12px;margin:0 0 8px">👉 Попълни стойността на обелените само ако е различна от автоматично изчислената.</p>' +
       '<button class="btn" data-action="addshell">➕ Запази обелените</button>' +
       '</div>' +
       '<div class="section-title">Записи</div>' +
