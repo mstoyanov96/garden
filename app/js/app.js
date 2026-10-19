@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -34,8 +34,8 @@
   var statPeriod = (function () { try { var v = localStorage.getItem(STAT_PERIOD_KEY); return STAT_PERIODS.indexOf(v) !== -1 ? v : 'today'; } catch (e) { return 'today'; } })();
   var statsMode = 'season'; // изглед на Статистика: 'season' | 'month' | 'weeks'
   var statsRef = null;      // Date-курсор за месец/седмици (кой месец / коя група седмици)
-  var logFilterType = 'all'; // филтър на дневника по вид действие ('all' или тип събитие)
-  var logFilterUser = 'all'; // филтър на дневника по човек ('all' или id на потребител)
+  var logFilterTypes = []; // филтър на дневника по вид действие (празно = всички; иначе списък типове)
+  var logFilterUsers = []; // филтър на дневника по човек (празно = всички; иначе списък id-та)
   var harvestHL = null;     // null или { id: kg } — подчертани дървета на картата (кой колко е дал)
   var statSuppressClick = false; // пропусни клика след суайп по бройките
   var mapSuppressClick = false; // пропусни клика след задържане/влачене, за да не размаркира
@@ -993,6 +993,8 @@
     cols.forEach(function (c) { if (cloud[c]) db[c] = cloud[c]; });
     if (cloud.settings) db.settings = cloud.settings;
     db.currentUserId = keepUser;
+    var addedSales = backfillSaleEvents();
+    if (addedSales) { changed = true; if (window.Sync) window.Sync.push(); }
     var fixed = normalizeZones();
     var fixedLm = ensureLandmarks();
     DB.migratePhotos(db);
@@ -1012,7 +1014,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { var fixed = normalizeZones(); var fixedLm = ensureLandmarks(); DB.migratePhotos(db); DB.save(db); if ((fixed || fixedLm) && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
+      onRemote: function () { var fixed = normalizeZones(); var fixedLm = ensureLandmarks(); var addedSales = backfillSaleEvents(); DB.migratePhotos(db); DB.save(db); if ((fixed || fixedLm || addedSales) && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
@@ -1746,27 +1748,27 @@
     var typesPresent = {}, usersPresent = {};
     all.forEach(function (e) { typesPresent[e.type] = 1; if (e.createdBy) usersPresent[e.createdBy] = 1; });
     var evs = all.filter(function (e) {
-      if (logFilterType !== 'all' && e.type !== logFilterType) return false;
-      if (logFilterUser !== 'all' && e.createdBy !== logFilterUser) return false;
+      if (logFilterTypes.length && logFilterTypes.indexOf(e.type) === -1) return false;
+      if (logFilterUsers.length && logFilterUsers.indexOf(e.createdBy) === -1) return false;
       return true;
     });
     // филтър по вид действие
-    var typeBtns = '<button class="' + (logFilterType === 'all' ? 'active' : '') + '" data-action="logtype:all">Всички</button>' +
+    var typeBtns = '<button class="' + (logFilterTypes.length === 0 ? 'active' : '') + '" data-action="logtype:all">Всички</button>' +
       Object.keys(LOG_TYPES).filter(function (k) { return typesPresent[k]; }).map(function (k) {
-        return '<button class="' + (logFilterType === k ? 'active' : '') + '" data-action="logtype:' + k + '">' + LOG_TYPES[k].ic + ' ' + esc(LOG_TYPES[k].t) + '</button>';
+        return '<button class="' + (logFilterTypes.indexOf(k) !== -1 ? 'active' : '') + '" data-action="logtype:' + k + '">' + LOG_TYPES[k].ic + ' ' + esc(LOG_TYPES[k].t) + '</button>';
       }).join('');
     // филтър по човек
-    var userBtns = '<button class="' + (logFilterUser === 'all' ? 'active' : '') + '" data-action="loguser:all">Всички</button>' +
+    var userBtns = '<button class="' + (logFilterUsers.length === 0 ? 'active' : '') + '" data-action="loguser:all">Всички</button>' +
       db.users.filter(function (u) { return usersPresent[u.id]; }).map(function (u) {
-        return '<button class="' + (logFilterUser === u.id ? 'active' : '') + '" data-action="loguser:' + u.id + '">' + esc(u.name) + '</button>';
+        return '<button class="' + (logFilterUsers.indexOf(u.id) !== -1 ? 'active' : '') + '" data-action="loguser:' + u.id + '">' + esc(u.name) + '</button>';
       }).join('');
     var shown = Math.min(evs.length, 200);
     var countNote = evs.length > shown
       ? '<p class="muted mb" style="font-size:12px">Показани са последните ' + shown + ' от ' + evs.length + '. Стесни търсенето с филтрите, за да видиш по-стари записи.</p>'
       : '<p class="muted mb" style="font-size:12px">Намерени записи: ' + evs.length + '.</p>';
     // кратко обобщение на активните филтри за заглавката на свитата секция
-    var activeType = logFilterType === 'all' ? '' : (LOG_TYPES[logFilterType] ? LOG_TYPES[logFilterType].t : '');
-    var activeUser = logFilterUser === 'all' ? '' : ((db.users.filter(function (u) { return u.id === logFilterUser; })[0] || {}).name || '');
+    var activeType = logFilterTypes.map(function (k) { return LOG_TYPES[k] ? LOG_TYPES[k].t : k; }).join(', ');
+    var activeUser = logFilterUsers.map(function (id) { return (db.users.filter(function (u) { return u.id === id; })[0] || {}).name || ''; }).filter(Boolean).join(', ');
     var activeBits = [activeType, activeUser].filter(Boolean);
     var filterSummary = activeBits.length ? activeBits.join(' · ') : 'всички';
     var filtersOpen = activeBits.length > 0; // ако има активен филтър — отвори, иначе свито
@@ -2841,8 +2843,8 @@
       case 'purge': if (isAdmin() && confirm('Да изтрия ли записа ЗАВИНАГИ? Не може да се върне.')) { purgeEvent(parts[1]); } break;
       case 'edit': editEvent(parts[1]); break;
       case 'saveedit': saveEditEvent(parts[1]); break;
-      case 'logtype': logFilterType = parts[1] || 'all'; render(); break;
-      case 'loguser': logFilterUser = parts.slice(1).join(':') || 'all'; render(); break;
+      case 'logtype': { var tp = parts[1] || 'all'; if (tp === 'all') logFilterTypes = []; else { var ti = logFilterTypes.indexOf(tp); if (ti === -1) logFilterTypes.push(tp); else logFilterTypes.splice(ti, 1); } render(); break; }
+      case 'loguser': { var up = parts.slice(1).join(':') || 'all'; if (up === 'all') logFilterUsers = []; else { var ui = logFilterUsers.indexOf(up); if (ui === -1) logFilterUsers.push(up); else logFilterUsers.splice(ui, 1); } render(); break; }
       case 'react': toggleReaction(parts[1]); break;
 
       case 'newsale': sheetNewSale(); break;
@@ -3944,6 +3946,27 @@
     addEvent({ type: 'sale_add', date: sale.date, note: bname, kg: kg, pricePerKg: price, total: sale.total, saleId: sale.id });
     closeSheet(); go('sales');
   }
+  // еднократно попълване: стари продажби (отпреди логването) да получат запис в дневника.
+  // id е детерминистично (ev_sale_<id>), за да не се дублира при синхронизация между устройства.
+  function backfillSaleEvents() {
+    if (!db.sales || !db.events) return false;
+    var have = {};
+    db.events.forEach(function (e) { if (e.type === 'sale_add' && e.saleId) have[e.saleId] = 1; });
+    var added = false;
+    db.sales.forEach(function (s) {
+      if (!s || !s.id || have[s.id]) return;
+      var bname = (db.buyers.find(function (x) { return x.id === s.buyerId; }) || {}).name || 'Купувач';
+      var ts = s.createdAt || (s.date ? new Date(s.date).getTime() : Date.now());
+      db.events.unshift({
+        id: 'ev_sale_' + s.id, type: 'sale_add', date: s.date, note: bname,
+        kg: s.kg || 0, pricePerKg: s.pricePerKg || 0, total: s.total || 0, saleId: s.id,
+        createdBy: s.createdBy || null, createdAt: ts, deletedAt: null, deletedBy: null
+      });
+      added = true;
+    });
+    if (added) DB.save(db);
+    return added;
+  }
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
     db.buyers.push({ id: DB.uid('buy'), name: name, phone: fmtPhone(el('bPhone').value), note: el('bNote').value, createdAt: Date.now() });
@@ -4068,6 +4091,7 @@
   if (db.currentUserId) onUserReady();
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   applyZoom();
+  backfillSaleEvents();
   render();
   startSync();
 })();
