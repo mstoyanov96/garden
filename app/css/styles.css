@@ -271,12 +271,12 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 /* ориентири на картата (порти, цистерна, спирка, гнездо) */
 .grid .lm{position:relative;z-index:3;pointer-events:none;display:flex;align-items:center;justify-content:center;
   transform:translate(calc(var(--dx,0)*1px),calc(var(--dy,0)*1px));}
-.grid .lm.badge{width:19px;height:19px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);overflow:hidden;}
-.grid .lm.badge svg{width:13px;height:13px;display:block;flex:none;}
-.grid .lm.gate{background:#cfe8d6;width:23px;height:23px;}
-.grid .lm.gate svg{width:15px;height:15px;flex:none;}
+.grid .lm.badge{width:22px;height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 3px rgba(0,0,0,.28);overflow:hidden;}
+.grid .lm.badge svg{width:18px;height:18px;display:block;flex:none;}
+.grid .lm.gate{background:#cfe8d6;width:24px;height:24px;}
+.grid .lm.gate svg{width:20px;height:20px;flex:none;}
 .grid .lm.cistern{background:var(--blue);}
-.grid .lm.stop{background:#17a08a;}
+.grid .lm.stop{background:#8ecbf2;}
 .grid .lm.nest{background:#e4d2b2;}
 .grid .lm.lm-tl{align-self:start;justify-self:start;}
 .grid .lm.lm-r{align-self:center;justify-self:end;}
