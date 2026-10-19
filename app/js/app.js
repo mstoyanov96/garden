@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.97.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.98.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -44,7 +44,9 @@
   var editMode = false;     // редактиране на схемата (само админ)
   var editingLmId = null;   // id на ориентира, който в момента се наглася (за подсветка)
   var editingLmKind = null; // вид на наглася ориентир (за смяна на цвят)
+  var editingTreeId = null; // id на дървото, което в момента се мести (за подсветка)
   var lmStep = 'coarse';    // стъпка при местене на ориентир: 'coarse' (едро) или 'fine' (дребно)
+  var floatPanelPos = null; // запомнена позиция на плаващия панел, след като го преместиш
   var pendingPhotoSrc = null; // избраната профилна снимка, докато се наглася вертикално
   var ppImgW = 0, ppImgH = 0; // размери на избраната снимка (за наместване: зуум + местене)
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
@@ -822,7 +824,7 @@
   // =======================================================================
   function go(name, param) {
     if (route.name === 'walk' && name !== 'walk') stopWalk();
-    if (editingLmId) closeLmEditor();
+    if (editingLmId || editingTreeId) closeLmEditor();
     if (name !== 'home' && mapSelected.length) clearMapSelect();
     if (name === 'harvest') harvestScreen = 'none'; // екран „Действия“ се отваря без избран таб
     if (name === 'log') markLogOpened(); // влизане в дневника → маркирай като видяно и махни бройката
@@ -856,7 +858,7 @@
   // назад през историята (телефонен бутон „назад“ и iOS суайп правят същото чрез popstate)
   function goBack() {
     if (isLightboxOpen()) { closeLightbox(); return; }
-    if (editingLmId) { closeLmEditor(); return; }
+    if (editingLmId || editingTreeId) { closeLmEditor(); return; }
     if (isSheetOpen()) { closeSheet(); return; }
     if (history.length > 1) history.back(); else go('home');
   }
@@ -867,8 +869,8 @@
     if (isLightboxOpen()) { closeLightbox(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     // ако има отворен лист (sheet) — затвори него и остани на същия изглед
     if (isSheetOpen()) { closeSheet(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
-    // ако се наглася ориентир — затвори панела и остани на картата
-    if (editingLmId) { closeLmEditor(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
+    // ако се наглася ориентир или се мести дърво — затвори панела и остани на картата
+    if (editingLmId || editingTreeId) { closeLmEditor(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     var st = e.state && e.state.route;
     if (route.name === 'walk') stopWalk();
     if (mapSelected.length) clearMapSelect();
@@ -1181,6 +1183,7 @@
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
           var hl = (harvestHL && harvestHL[t.id] != null) ? ' hl-harvest' : '';
+          var ted = (t.id === editingTreeId) ? ' tree-editing' : '';
           var hlBadge = (harvestHL && harvestHL[t.id] != null) ? '<span class="hlkg">' + fmtKg(harvestHL[t.id]) + ' кг</span>' : '';
           var svg, doneCls = '', ageHtml = '';
           if (mode === 'harvest') {
@@ -1192,7 +1195,7 @@
           } else {
             svg = treeSVGFull(vShape, healthColors(t.health), vMark, vLetter, vBorder);
           }
-          html += '<div class="tree-cell' + small + dec.cls + sel + doneCls + hl + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
+          html += '<div class="tree-cell' + small + dec.cls + sel + doneCls + hl + ted + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
             '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span>' + ageHtml + hlBadge + '</div>';
 
         } else if (edit && !isReserved) {
@@ -2712,8 +2715,9 @@
       case 'editschema': if (isAdmin()) { editMode = !editMode; closeLmEditor(); render(); } break;
       case 'addtree': sheetAddTree(parts[1], parseInt(parts[2], 10)); break;
       case 'savenewtree': saveNewTree(parts[1], parseInt(parts[2], 10)); break;
-      case 'edittree': sheetEditTree(parts[1]); break;
-      case 'movetree': moveTree(parts[1], parts[2]); break;
+      case 'edittree': floatEditTree(parts[1]); break;
+      case 'treemove': nudgeTree(parts[1], parts[2]); break;
+      case 'edittreefull': closeLmEditor(); sheetEditTree(parts[1]); break;
       case 'deltree': deleteTree(parts[1]); break;
 
       case 'editzone': sheetEditZone(parts[1]); break;
@@ -2903,29 +2907,12 @@
       db.settings.varieties.map(function (v) { return '<option value="' + v.id + '"' + (v.id === t.varietyId ? ' selected' : '') + '>' + esc(v.name) + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><label>Състояние</label><select id="etHealth2" class="input">' +
       ['green', 'yellow', 'red'].map(function (h) { return '<option value="' + h + '"' + (t.health === h ? ' selected' : '') + '>' + healthLabel(h) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="field"><label>Премести</label><div class="move-pad">' +
-      '<span class="sp"></span><button data-action="movetree:' + id + ':up">↑</button><span class="sp"></span>' +
-      '<button data-action="movetree:' + id + ':left">←</button><span class="sp"></span><button data-action="movetree:' + id + ':right">→</button>' +
-      '<span class="sp"></span><button data-action="movetree:' + id + ':down">↓</button><span class="sp"></span>' +
-      '</div></div>' +
       '<button class="btn" data-action="savetree:' + id + '">💾 Запази</button>' +
       '<button class="btn danger mt" data-action="deltree:' + id + '">🗑️ Изтрий дървото</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>', true);
   }
   function occupied(row, col, exceptId) {
     return db.trees.some(function (t) { return !t.deletedAt && t.row === row && t.col === col && t.id !== exceptId; });
-  }
-  function moveTree(id, dir) {
-    var t = tree(id); if (!t) return;
-    var order = DB.ROW_LETTERS, ri = order.indexOf(t.row);
-    var nr = t.row, nc = t.col;
-    if (dir === 'left') nc = Math.max(1, t.col - 1);
-    else if (dir === 'right') nc = Math.min(9, t.col + 1);
-    else if (dir === 'up') nr = order[Math.max(0, ri - 1)] || t.row;
-    else if (dir === 'down') nr = order[ri + 1] || t.row;
-    if ((nr !== t.row || nc !== t.col) && !occupied(nr, nc, id)) { t.row = nr; t.col = nc; save(); }
-    sheetEditTree(id);
-    updateMap();
   }
   function deleteTree(id) {
     if (!isAdmin()) return;
@@ -3002,23 +2989,65 @@
     save(); closeSheet(); render();
   }
 
-  // ---- Landmarks (ориентири) — фино наместване (admin) -------------------
-  // плаващ панел със стрелки — винаги се вижда и лесно се затваря
-  function sheetEditLandmark(id) {
-    if (!isAdmin()) return;
-    var m = lmById(id); if (!m) return;
-    editingLmId = id; editingLmKind = m.kind;
-    var name = LM_LABELS[m.kind] || 'Ориентир';
+  // ---- Плаващ панел (ориентири и дървета) — може да се мести, лесно се затваря ----
+  // монтира/обновява плаващия панел; позицията се пази извън innerHTML, за да не трепка при обновяване
+  function mountFloatPanel(innerHTML) {
     var ed = el('lmEditor');
     if (!ed) {
       ed = document.createElement('div');
       ed.id = 'lmEditor';
       ed.className = 'lm-editor';
       document.body.appendChild(ed);
+      enableFloatDrag(ed);
     }
+    ed.innerHTML = innerHTML;
+    if (floatPanelPos) { ed.style.left = floatPanelPos.left + 'px'; ed.style.top = floatPanelPos.top + 'px'; ed.style.bottom = 'auto'; ed.style.transform = 'none'; }
+    return ed;
+  }
+
+  // влачене на панела за дръжката в заглавието (но не върху бутони/полета)
+  function enableFloatDrag(ed) {
+    var dragging = false, sx = 0, sy = 0, startLeft = 0, startTop = 0;
+    ed.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest('.lm-ed-head')) return;
+      if (e.target.closest('button, input, label, select')) return;
+      var r = ed.getBoundingClientRect();
+      startLeft = r.left; startTop = r.top;
+      ed.style.left = startLeft + 'px'; ed.style.top = startTop + 'px'; ed.style.bottom = 'auto'; ed.style.transform = 'none';
+      sx = e.clientX; sy = e.clientY; dragging = true;
+      ed.classList.add('dragging');
+      try { ed.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    ed.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var w = ed.offsetWidth, h = ed.offsetHeight;
+      var nl = Math.min(Math.max(4, startLeft + (e.clientX - sx)), window.innerWidth - w - 4);
+      var nt = Math.min(Math.max(4, startTop + (e.clientY - sy)), window.innerHeight - h - 4);
+      ed.style.left = nl + 'px'; ed.style.top = nt + 'px';
+      floatPanelPos = { left: nl, top: nt };
+    });
+    function end(e) { if (dragging) { dragging = false; ed.classList.remove('dragging'); try { ed.releasePointerCapture(e.pointerId); } catch (_) {} } }
+    ed.addEventListener('pointerup', end);
+    ed.addEventListener('pointercancel', end);
+  }
+
+  function closeLmEditor() {
+    var ed = el('lmEditor');
+    if (ed) ed.remove();
+    if (editingLmId || editingTreeId) { editingLmId = null; editingLmKind = null; editingTreeId = null; updateMap(); }
+  }
+
+  // ---- Landmarks (ориентири) — наместване през плаващия панел -------------
+  function sheetEditLandmark(id) {
+    if (!isAdmin()) return;
+    var m = lmById(id); if (!m) return;
+    editingLmId = id; editingLmKind = m.kind; editingTreeId = null;
+    var name = LM_LABELS[m.kind] || 'Ориентир';
     var fine = lmStep === 'fine';
-    ed.innerHTML =
+    mountFloatPanel(
       '<div class="lm-ed-head">' +
+      '<span class="lm-grip">⠿</span>' +
       '<span class="lm-ed-title">' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span>' : '') + esc(name) + '</span>' +
       '<label class="lm-ed-color"><input id="lmColor" type="color" value="' + lmColor(m.kind) + '"/></label>' +
       '<button class="lm-ed-btn" data-action="lmcolorreset:' + id + '" title="Стандартен цвят">🎨↺</button>' +
@@ -3031,25 +3060,19 @@
       '<button data-action="lmnudge:' + id + ':right">→</button>' +
       '<span></span><button data-action="lmnudge:' + id + ':down">↓</button><span></span>' +
       '</div>' +
-      '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>';
+      '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>');
     updateMap();
-    scrollEditingLandmark();
+    scrollEditingEl('.lm.lm-editing');
   }
 
-  function closeLmEditor() {
-    var ed = el('lmEditor');
-    if (ed) ed.remove();
-    if (editingLmId) { editingLmId = null; editingLmKind = null; updateMap(); }
-  }
-
-  // скролва нагласяния ориентир в горната видима част, за да не го крие панелът отдолу
-  function scrollEditingLandmark() {
+  // скролва нагласяния елемент в горната видима част, за да не го крие панелът
+  function scrollEditingEl(sel) {
     try {
       requestAnimationFrame(function () {
-        var elLm = document.querySelector('.lm.lm-editing');
-        if (!elLm) return;
-        var r = elLm.getBoundingClientRect();
-        var target = window.innerHeight * 0.28; // горна трета на екрана
+        var elx = document.querySelector(sel);
+        if (!elx) return;
+        var r = elx.getBoundingClientRect();
+        var target = window.innerHeight * 0.28;
         var dy = r.top - target;
         if (Math.abs(dy) > 12) window.scrollBy({ top: dy, left: 0, behavior: 'smooth' });
       });
@@ -3063,7 +3086,7 @@
     else if (dir === 'down') m.dy = (m.dy || 0) + step;
     else if (dir === 'left') m.dx = (m.dx || 0) - step;
     else if (dir === 'right') m.dx = (m.dx || 0) + step;
-    save(); updateMap(); scrollEditingLandmark();
+    save(); updateMap(); scrollEditingEl('.lm.lm-editing');
   }
 
   function toggleLmStep() {
@@ -3074,12 +3097,46 @@
   function resetLandmark(id) {
     var m = lmById(id); if (!m) return;
     var def = (DB.defaultLandmarks() || []).find(function (d) { return d.id === id; });
-    if (def) { m.gr = def.gr; m.gc = def.gc; m.dx = def.dx; m.dy = def.dy; m.anchor = def.anchor; save(); updateMap(); scrollEditingLandmark(); }
+    if (def) { m.gr = def.gr; m.gc = def.gc; m.dx = def.dx; m.dy = def.dy; m.anchor = def.anchor; save(); updateMap(); scrollEditingEl('.lm.lm-editing'); }
   }
   function resetLandmarkColor(id) {
     var m = lmById(id); if (!m || !isAdmin()) return;
     if (db.settings.landmarkColors) { delete db.settings.landmarkColors[m.kind]; save(); updateMap(); }
     var inp = el('lmColor'); if (inp) inp.value = LM_DEFAULT_COLORS[m.kind] || '#cfe8d6';
+  }
+
+  // ---- Дървета — местене през същия плаващ панел -------------------------
+  function floatEditTree(id) {
+    if (!isAdmin()) return;
+    var t = tree(id); if (!t) return;
+    editingTreeId = id; editingLmId = null; editingLmKind = null;
+    mountFloatPanel(
+      '<div class="lm-ed-head">' +
+      '<span class="lm-grip">⠿</span>' +
+      '<span class="lm-ed-title">🌳 ' + esc(t.code) + '</span>' +
+      '<button class="lm-ed-close" data-action="closelmeditor" aria-label="Затвори">✕</button>' +
+      '</div>' +
+      '<div class="lm-pad">' +
+      '<span></span><button data-action="treemove:' + id + ':up">↑</button><span></span>' +
+      '<button data-action="treemove:' + id + ':left">←</button>' +
+      '<button class="lm-step" data-action="edittreefull:' + id + '">✏️<br><small>детайли</small></button>' +
+      '<button data-action="treemove:' + id + ':right">→</button>' +
+      '<span></span><button data-action="treemove:' + id + ':down">↓</button><span></span>' +
+      '</div>');
+    updateMap();
+    scrollEditingEl('.tree-cell.tree-editing');
+  }
+
+  function nudgeTree(id, dir) {
+    var t = tree(id); if (!t) return;
+    var order = DB.ROW_LETTERS, ri = order.indexOf(t.row);
+    var nr = t.row, nc = t.col;
+    if (dir === 'left') nc = Math.max(1, t.col - 1);
+    else if (dir === 'right') nc = Math.min(9, t.col + 1);
+    else if (dir === 'up') nr = order[Math.max(0, ri - 1)] || t.row;
+    else if (dir === 'down') nr = order[ri + 1] || t.row;
+    if ((nr !== t.row || nc !== t.col) && !occupied(nr, nc, id)) { t.row = nr; t.col = nc; save(); }
+    updateMap(); scrollEditingEl('.tree-cell.tree-editing');
   }
 
   // ---- User management (owner) ------------------------------------------

@@ -287,11 +287,16 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .grid .lm.editable{pointer-events:auto;cursor:pointer;outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
 .grid .lm.lm-editing{z-index:5;outline:2px solid #e4572e;outline-offset:1px;animation:lmpulse 1s ease-in-out infinite;}
 @keyframes lmpulse{0%,100%{box-shadow:0 0 0 0 rgba(228,87,46,.55);}50%{box-shadow:0 0 0 7px rgba(228,87,46,0);}}
+.tree-cell.tree-editing{z-index:6;}
+.tree-cell.tree-editing .svgwrap{outline:2px solid #e4572e;outline-offset:1px;border-radius:50%;animation:lmpulse 1s ease-in-out infinite;}
 /* плаващ панел за наместване на ориентир — винаги видим, с ясен бутон за затваряне */
 .lm-editor{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;
   width:min(300px,calc(100vw - 24px));background:#fff;border:1px solid #d9e0d9;border-radius:16px;
-  box-shadow:0 8px 28px rgba(0,0,0,.26);padding:10px 12px;}
-.lm-ed-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  box-shadow:0 8px 28px rgba(0,0,0,.26);padding:10px 12px;touch-action:none;}
+.lm-editor.dragging{box-shadow:0 12px 34px rgba(0,0,0,.34);}
+.lm-ed-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:grab;touch-action:none;}
+.lm-editor.dragging .lm-ed-head{cursor:grabbing;}
+.lm-grip{color:#aab2aa;font-size:16px;line-height:1;letter-spacing:-2px;cursor:grab;user-select:none;}
 .lm-ed-title{display:flex;align-items:center;gap:6px;font-weight:700;font-size:15px;flex:1;min-width:0;}
 .lm-ed-title .lm-ico{width:20px;height:20px;}.lm-ed-title .lm-ico svg{width:20px;height:20px;}
 .lm-ed-color{display:inline-flex;}
