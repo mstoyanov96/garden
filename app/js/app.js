@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.94.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.95.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -525,6 +525,14 @@
     nest: '<svg viewBox="0 0 24 24"><path d="M3 11c0 4 4 7 9 7s9-3 9-7Z" fill="#7a4a2f"/><ellipse cx="9.3" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/><ellipse cx="14.7" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/></svg>'
   };
   var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', stop: 'Спирка', nest: 'Гнездо' };
+  // мащаб на иконките на ориентирите (админ-настройка, синхронизира се за всички)
+  function lmScale() { var s = db.settings && db.settings.landmarkScale; return (typeof s === 'number' && s > 0) ? s : 1; }
+  function setLmScale(val) {
+    if (!isAdmin()) return;
+    var v = Math.max(0.5, Math.min(2, Math.round(val * 10) / 10));
+    db.settings.landmarkScale = v;
+    save(); render();
+  }
 
   function landmarkPrefKey() { return 'walnut_landmarks_' + (db.currentUserId || ''); }
   // по подразбиране ориентирите се виждат (освен ако потребителят ги е изключил)
@@ -1123,7 +1131,7 @@
 
     // всяка колона е разделена на 2 полу-коли, за да може границата да мине през средата на колона 6
     var cols2 = maxCol * 2;
-    var html = '<div class="grid" style="grid-template-columns:16px repeat(' + cols2 + ',1fr)">';
+    var html = '<div class="grid" style="grid-template-columns:16px repeat(' + cols2 + ',1fr);--lm-scale:' + lmScale() + '">';
     html += '<div class="corner" style="grid-row:1;grid-column:1"></div>';
     for (var c = 1; c <= maxCol; c++) html += '<div class="colhead" style="grid-row:1;grid-column:' + (2 * c) + ' / span 2">' + (c - 1) + '</div>';
     // декоративни зони (Градина, Къща, Кокошки, Джаро) — местят се/оразмеряват в режим редакция
@@ -2026,6 +2034,14 @@
       '<div class="row" style="align-items:center;justify-content:space-between">' +
       '<b style="font-size:15px">Показвай ориентирите</b>' +
       '<button class="btn sm ' + (landmarksVisible() ? '' : 'secondary') + '" data-action="togglelandmarks">' + (landmarksVisible() ? '✅ Включено' : 'Изключено') + '</button></div>' +
+      (isAdmin() ? '<hr style="border:none;border-top:1px solid #e4e9e4;margin:12px 0"/>' +
+        '<p class="muted mb" style="font-size:13px">Размер на значките (за всички потребители).</p>' +
+        '<div class="row" style="align-items:center">' +
+        '<button class="btn secondary" data-action="lmscaledown">➖ По-малки</button>' +
+        '<div class="center" style="font-size:20px;font-weight:800;color:var(--green-dark);min-width:72px">' + Math.round(lmScale() * 100) + '%</div>' +
+        '<button class="btn secondary" data-action="lmscaleup">➕ По-големи</button>' +
+        '</div>' +
+        '<button class="btn ghost mt" data-action="lmscalereset">↺ Нормален размер (100%)</button>' : '') +
       (isAdmin() ? '<p class="muted" style="font-size:12px;margin:10px 0 0">Съвет: като админ влез в „✏️ Редактирай схемата" на картата и докосни ориентир, за да го наместиш много фино.</p>' : '') +
       '</div>' +
       '</div></details>' +
@@ -2687,6 +2703,9 @@
       case 'lmjump': jumpLandmark(parts[1], parts[2]); break;
       case 'lmreset': resetLandmark(parts[1]); break;
       case 'togglelandmarks': setLandmarksVisible(!landmarksVisible()); render(); break;
+      case 'lmscaleup': setLmScale(lmScale() + 0.1); break;
+      case 'lmscaledown': setLmScale(lmScale() - 0.1); break;
+      case 'lmscalereset': setLmScale(1); break;
 
       case 'care': careTab = parts[1]; careScope = 'all'; careTreePreset = ''; go('care'); break;
       case 'ctab': careTab = parts[1]; render(); break;
