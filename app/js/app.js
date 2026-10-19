@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.98.8';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.98.9';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -710,6 +710,11 @@
     n = Math.round(((n || 0) + Number.EPSILON) * 1000) / 1000;
     return n.toFixed(3).replace(/\.?0+$/, '');
   }
+  // като fmtKg, но закръгля до 2 знака след десетичната запетая
+  function fmtKg2(n) {
+    n = Math.round(((n || 0) + Number.EPSILON) * 100) / 100;
+    return n.toFixed(2).replace(/\.?0+$/, '');
+  }
   // еталонна кофа за броене („кофа за сирене“) — спрямо нея се смятат „кофи днес“
   function refBucket() { return bucket('buc_cheese') || (db.settings.buckets && db.settings.buckets[0]); }
   function refBucketKg() {
@@ -1095,7 +1100,7 @@
       '<div id="statSwipe">' +
       '<div class="stat-row">' +
       '<div class="stat green harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(greenBk) + '</b></div><small>кофи зелени ' + perLbl + '</small><small class="kg">≈ ' + fmtKg(hv.kg) + ' кг (без кофите)</small></div>' +
-      '<div class="stat shelled harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg(shelledBk) + '</b></div><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг (без кофите)</small></div>' +
+      '<div class="stat shelled harvstat" data-action="statbreak"><div class="statnum"><img class="bkimg" src="assets/bucket_cheese.png" alt=""/><b>' + fmtKg2(shelledBk) + '</b></div><small>кофи обелени ' + perLbl + (sh.manual ? ' ✏️' : '') + '</small><small class="kg">≈ ' + fmtKg(shelledKg) + ' кг (без кофите)</small></div>' +
       '</div>' +
       '<div class="stat-period-wrap">' +
       '<select id="homePeriod" class="stat-period-sel">' +
