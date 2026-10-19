@@ -303,7 +303,6 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell .age.old{background:#e7ece8;color:#6f7d73;}
 .tree-cell.sel .svgwrap{filter:drop-shadow(0 0 0 3px var(--blue));}
 /* Дребен сорт — като другите специални сортове: мек пръстен + надпис в орехово-кафяво */
-.tree-cell.small-badge .svgwrap{border:2px solid #ead9bb;border-radius:50%;box-sizing:border-box;padding:3px;background:#fdfaf4;}
 .tree-cell.small-badge .code{background:#fff;color:#8a6d2f;border:1.5px solid #c9a96a;padding:1px 6px;border-radius:8px;font-weight:800;}
 /* Български сорт — знаме (бяло/зелено/червено), меки тонове + зелен пръстен */
 .tree-cell.var-bg .svgwrap{border:2px solid #c2e6d4;border-radius:50%;box-sizing:border-box;padding:3px;background:linear-gradient(#ffffff 0 33%,#e4f6ed 33% 66%,#fce5e2 66% 100%);}

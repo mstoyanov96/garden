@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Преглед: сорт Педро — алтернативни дръвчета</title>
+<style>
+  :root{
+    --green:#2f9e52;--green-dark:#1f7a43;--muted:#6f7d73;--line:#dfe5e0;
+    --card:#fff;--ink:#1e2a22;--bg:#eef3ee;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);padding:18px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  p.sub{margin:0 0 18px;color:var(--muted);font-size:14px;}
+  .grid-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
+  .opt{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:14px 12px 16px;
+    display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;}
+  .opt.current{border-color:#e4b06b;}
+  .opt .tag{position:absolute;top:-10px;left:12px;font-size:11px;font-weight:800;
+    background:#1f7a43;color:#fff;padding:2px 8px;border-radius:10px;}
+  .opt.current .tag{background:#c98a2e;}
+  .opt h3{margin:4px 0 0;font-size:14px;text-align:center;}
+  .opt .desc{font-size:11px;color:var(--muted);text-align:center;line-height:1.3;}
+  /* копие на реалната клетка от приложението */
+  .tree-cell{width:100%;max-width:92px;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .tree-cell .svgwrap{width:100%;max-width:60px;aspect-ratio:1;}
+  .tree-cell .code{font-size:11px;font-weight:700;color:var(--muted);line-height:1;}
+
+  /* текущ: .small-badge (бежово-кафяв пръстен) */
+  .small-badge .svgwrap{border:2px solid #ead9bb;border-radius:50%;box-sizing:border-box;padding:4px;background:#fdfaf4;}
+  .small-badge .code{background:#fff;color:#8a6d2f;border:1.5px solid #c9a96a;padding:1px 7px;border-radius:8px;font-weight:800;}
+
+  /* Опция A: мек зелен пръстен + малки орехчета */
+  .optA .svgwrap{border:2px solid #bfe6cf;border-radius:50%;box-sizing:border-box;padding:4px;background:#f3faf5;}
+  .optA .code{background:#fff;color:#1f7a52;border:1.5px solid #8fd0ab;padding:1px 7px;border-radius:8px;font-weight:800;}
+
+  /* Опция B: без пръстен, дръвче с малки орехчета */
+  .optB .code{background:#fff;color:#8a6d2f;border:1.5px solid #d8c59a;padding:1px 7px;border-radius:8px;font-weight:800;}
+
+  /* Опция C: различна корона (по-храстовидна) с малка точка-баджче */
+  .optC .svgwrap{position:relative;}
+  .optC .code{background:#fff;color:#6b4a86;border:1.5px solid #c3a9dc;padding:1px 7px;border-radius:8px;font-weight:800;}
+
+  /* Опция D: различна форма (по-тясна/овална корона) */
+  .optD .code{background:#fff;color:#2f6a4a;border:1.5px solid #a7cdb8;padding:1px 7px;border-radius:8px;font-weight:800;}
+
+  .note{margin-top:22px;font-size:13px;color:var(--muted);background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:12px 14px;}
+  .cmp{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:6px;}
+  .cmp .mini{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--muted);}
+  .cmp .mini .svgwrap{width:42px;height:42px;}
+</style>
+</head>
+<body>
+  <h1>Сорт „Педро" — как да изглежда дръвчето</h1>
+  <p class="sub">Вляво е текущото (бежово-кафяв пръстен). Останалите са идеи. Кажи кой номер харесваш.</p>
+
+  <div class="grid-opts">
+
+    <!-- ТЕКУЩ -->
+    <div class="opt current">
+      <span class="tag">СЕГА</span>
+      <div class="tree-cell small-badge">
+        <div class="svgwrap" id="cur"></div>
+        <span class="code">Д3</span>
+      </div>
+      <h3>Бежово-кафяв пръстен</h3>
+      <div class="desc">Текущият вид — кафеникав кръг около дръвчето.</div>
+    </div>
+
+    <!-- A -->
+    <div class="opt optA">
+      <span class="tag">A</span>
+      <div class="tree-cell optA">
+        <div class="svgwrap" id="optA"></div>
+        <span class="code">Д3</span>
+      </div>
+      <h3>Мек зелен пръстен + орехчета</h3>
+      <div class="desc">Същата форма, но свеж зелен пръстен и 3 малки орехчета (знак за дребен сорт).</div>
+    </div>
+
+    <!-- B -->
+    <div class="opt optB">
+      <span class="tag">B</span>
+      <div class="tree-cell optB">
+        <div class="svgwrap" id="optB"></div>
+        <span class="code">Д3</span>
+      </div>
+      <h3>Без пръстен, с орехчета</h3>
+      <div class="desc">Чисто дръвче без кръг, с няколко малки орехчета по короната.</div>
+    </div>
+
+    <!-- C -->
+    <div class="opt optC">
+      <span class="tag">C</span>
+      <div class="tree-cell optC">
+        <div class="svgwrap" id="optC"></div>
+        <span class="code">Д3</span>
+      </div>
+      <h3>По-храстовидна корона</h3>
+      <div class="desc">Различна, по-закръглена/гъста корона — отличава се по форма, не по пръстен.</div>
+    </div>
+
+    <!-- D -->
+    <div class="opt optD">
+      <span class="tag">D</span>
+      <div class="tree-cell optD">
+        <div class="svgwrap" id="optD"></div>
+        <span class="code">Д3</span>
+      </div>
+      <h3>По-тясна (овална) корона</h3>
+      <div class="desc">По-слаба, издължена корона — визуално „по-дребно" дърво.</div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>За сравнение до Чандлър (едър сорт):</b> така ще се различават на картата един до друг.
+    <div class="cmp" id="cmpRow"></div>
+  </div>
+
+<script>
+  // ---- стандартното дръвче от приложението (3 кръга + ствол) ----
+  function treeStd(c){
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+
+      '<rect x="29" y="42" width="6" height="16" rx="2" fill="#8a5a3b"/>'+
+      '<circle cx="22" cy="30" r="14" fill="'+c[2]+'"/>'+
+      '<circle cx="42" cy="30" r="14" fill="'+c[1]+'"/>'+
+      '<circle cx="32" cy="20" r="15" fill="'+c[0]+'"/>'+
+      '<circle cx="32" cy="30" r="13" fill="'+c[1]+'"/>'+
+      '</svg>';
+  }
+  // стандартно + малки орехчета по короната
+  function treeNuts(c){
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+
+      '<rect x="29" y="42" width="6" height="16" rx="2" fill="#8a5a3b"/>'+
+      '<circle cx="22" cy="30" r="14" fill="'+c[2]+'"/>'+
+      '<circle cx="42" cy="30" r="14" fill="'+c[1]+'"/>'+
+      '<circle cx="32" cy="20" r="15" fill="'+c[0]+'"/>'+
+      '<circle cx="32" cy="30" r="13" fill="'+c[1]+'"/>'+
+      // орехчета
+      '<g>'+
+      '<circle cx="24" cy="26" r="3.1" fill="#b07a44"/><path d="M24 23v6" stroke="#8a5a2f" stroke-width="1"/>'+
+      '<circle cx="39" cy="24" r="3.1" fill="#b07a44"/><path d="M39 21v6" stroke="#8a5a2f" stroke-width="1"/>'+
+      '<circle cx="33" cy="33" r="3.1" fill="#b07a44"/><path d="M33 30v6" stroke="#8a5a2f" stroke-width="1"/>'+
+      '</g>'+
+      '</svg>';
+  }
+  // по-храстовидна/закръглена корона (повече малки кръгове)
+  function treeBushy(c){
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+
+      '<rect x="29" y="44" width="6" height="15" rx="2" fill="#8a5a3b"/>'+
+      '<circle cx="20" cy="34" r="12" fill="'+c[2]+'"/>'+
+      '<circle cx="44" cy="34" r="12" fill="'+c[2]+'"/>'+
+      '<circle cx="26" cy="24" r="12" fill="'+c[1]+'"/>'+
+      '<circle cx="40" cy="24" r="12" fill="'+c[1]+'"/>'+
+      '<circle cx="32" cy="30" r="14" fill="'+c[0]+'"/>'+
+      '<circle cx="32" cy="22" r="9" fill="'+c[1]+'"/>'+
+      '</svg>';
+  }
+  // по-тясна/овална корона
+  function treeSlim(c){
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+
+      '<rect x="30" y="42" width="5" height="17" rx="2" fill="#8a5a3b"/>'+
+      '<ellipse cx="32" cy="28" rx="11" ry="20" fill="'+c[1]+'"/>'+
+      '<ellipse cx="32" cy="24" rx="8.5" ry="15" fill="'+c[0]+'"/>'+
+      '<ellipse cx="32" cy="34" rx="9" ry="12" fill="'+c[2]+'"/>'+
+      '</svg>';
+  }
+
+  var GREEN = ['#4bb869','#2f9e52','#1f7a43'];
+
+  document.getElementById('cur').innerHTML  = treeStd(GREEN);
+  document.getElementById('optA').innerHTML = treeNuts(GREEN);
+  document.getElementById('optB').innerHTML = treeNuts(GREEN);
+  document.getElementById('optC').innerHTML = treeBushy(GREEN);
+  document.getElementById('optD').innerHTML = treeSlim(GREEN);
+
+  // ред за сравнение Чандлър (едър, стандарт) vs всяка опция за Педро
+  var cmp = document.getElementById('cmpRow');
+  function mini(label, svg, cls){
+    var d=document.createElement('div'); d.className='mini '+(cls||'');
+    d.innerHTML = '<div class="svgwrap tree-cell '+(cls||'')+'" style="max-width:none">'+svg+'</div>'+label;
+    return d;
+  }
+  cmp.appendChild(mini('Чандлър', treeStd(GREEN)));
+  cmp.appendChild(mini('Педро СЕГА', treeStd(GREEN), 'small-badge'));
+  cmp.appendChild(mini('Педро A', treeNuts(GREEN), 'optA'));
+  cmp.appendChild(mini('Педро B', treeNuts(GREEN), 'optB'));
+  cmp.appendChild(mini('Педро C', treeBushy(GREEN), 'optC'));
+  cmp.appendChild(mini('Педро D', treeSlim(GREEN), 'optD'));
+</script>
+</body>
+</html>

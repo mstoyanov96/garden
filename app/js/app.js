@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.89.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.90.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -358,11 +358,22 @@
       '<circle cx="32" cy="30" r="13" fill="' + c[1] + '"/>' +
       '</svg>';
   }
-  function treeSVG(health) {
-    var c = health === 'green' ? ['#4bb869', '#2f9e52', '#1f7a43']
+  // по-тясна, овална корона — за дребните сортове (напр. Педро)
+  function treeSVGColorsSlim(c) {
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">' +
+      '<rect x="30" y="42" width="5" height="17" rx="2" fill="#8a5a3b"/>' +
+      '<ellipse cx="32" cy="28" rx="11" ry="20" fill="' + c[1] + '"/>' +
+      '<ellipse cx="32" cy="24" rx="8.5" ry="15" fill="' + c[0] + '"/>' +
+      '<ellipse cx="32" cy="34" rx="9" ry="12" fill="' + c[2] + '"/>' +
+      '</svg>';
+  }
+  function healthColors(health) {
+    return health === 'green' ? ['#4bb869', '#2f9e52', '#1f7a43']
       : health === 'yellow' ? ['#f6c65a', '#f3b53c', '#d9962a']
         : ['#ec726b', '#e4584f', '#c23e36'];
-    return treeSVGColors(c);
+  }
+  function treeSVG(health) {
+    return treeSVGColors(healthColors(health));
   }
 
   // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
@@ -992,6 +1003,7 @@
           var v = variety(t.varietyId);
           var dec = varDecor(v);
           var small = (!dec.cls && v && v.size === 'small') ? ' small-badge' : '';
+          var slimShape = !!small;   // дребните сортове (Педро) са с по-тясна овална корона
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
           var hl = (harvestHL && harvestHL[t.id] != null) ? ' hl-harvest' : '';
@@ -999,12 +1011,12 @@
           var svg, doneCls = '', ageHtml = '';
           if (mode === 'harvest') {
             var fresh = harvestFreshness(t.id);
-            svg = treeSVGColors(FRESH_COLORS[fresh]);
+            svg = slimShape ? treeSVGColorsSlim(FRESH_COLORS[fresh]) : treeSVGColors(FRESH_COLORS[fresh]);
             if (harvestedToday(t.id)) doneCls = ' harvested-today';
             var al = harvestAgoLabel(t.id);
             if (al) ageHtml = '<span class="age ' + fresh + '">' + al + '</span>';
           } else {
-            svg = treeSVG(t.health);
+            svg = slimShape ? treeSVGColorsSlim(healthColors(t.health)) : treeSVG(t.health);
           }
           html += '<div class="tree-cell' + small + dec.cls + sel + doneCls + hl + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
             '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span>' + ageHtml + hlBadge + '</div>';
@@ -1041,7 +1053,7 @@
       '<div class="card flush">' +
       (lastPhoto ? '<img class="detail-photo" src="' + lastPhoto.data + '" style="border-radius:0;cursor:pointer"' + (lastPhoto.id ? ' data-action="zoomphoto:' + t.id + ':' + lastPhoto.id + '"' : '') + '/>' :
         '<div class="detail-photo" style="display:flex;align-items:center;justify-content:center">' +
-        '<div style="width:90px;height:90px">' + treeSVG(t.health) + '</div></div>') +
+        '<div style="width:90px;height:90px">' + ((v && v.size === 'small' && !varDecor(v).cls) ? treeSVGColorsSlim(healthColors(t.health)) : treeSVG(t.health)) + '</div></div>') +
       '<div style="padding:16px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
       '<h2 style="font-size:22px">Дърво ' + esc(t.code) + '</h2>' +
