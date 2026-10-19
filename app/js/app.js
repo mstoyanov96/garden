@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1695,6 +1695,7 @@
     tree_edit: { ic: '⚙️', cls: 'sys', t: 'Промяна на дърво' },
     buyer_add: { ic: '🤝', cls: 'sys', t: 'Нов купувач' },
     buyer_del: { ic: '🗑️', cls: 'sys', t: 'Изтрит купувач' },
+    sale_add: { ic: '💰', cls: 'harvest', t: 'Продажба' },
     note: { ic: '📝', cls: 'sys', t: 'Бележка' }
   };
   // кои видове записи може да се редактират (дата + стойности)
@@ -1712,6 +1713,7 @@
     else if (e.type === 'fertilize') detail = esc(e.what || '') + (e.qty ? ' · ' + e.qty + ' ' + esc(e.unit || '') : '');
     else if (e.type === 'water') detail = (e.qty || 0) + ' л';
     else if (e.type === 'mow') detail = 'окосено';
+    else if (e.type === 'sale_add') detail = esc(e.note || 'Купувач') + ' · ' + fmtKg(e.kg) + ' кг' + (e.pricePerKg ? ' · ' + e.pricePerKg + ' €/кг' : '') + ' · ' + Math.round(e.total || 0) + ' €';
     else if (e.note) detail = esc(e.note);
 
     var onBehalf = e.onBehalfOf ? ' (от името на ' + esc(e.onBehalfOf) + ')' : '';
@@ -3937,7 +3939,10 @@
     var kg = parseFloat(el('saleKg').value) || 0;
     var price = parseFloat(el('salePrice').value) || 0;
     var sale = { id: DB.uid('sale'), buyerId: el('saleBuyer').value, date: el('saleDate').value, kg: kg, pricePerKg: price, total: kg * price, note: el('saleNote').value, createdBy: db.currentUserId };
-    db.sales.unshift(sale); save(); closeSheet(); go('sales');
+    db.sales.unshift(sale);
+    var bname = (db.buyers.find(function (x) { return x.id === sale.buyerId; }) || {}).name || 'Купувач';
+    addEvent({ type: 'sale_add', date: sale.date, note: bname, kg: kg, pricePerKg: price, total: sale.total, saleId: sale.id });
+    closeSheet(); go('sales');
   }
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
