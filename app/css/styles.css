@@ -341,6 +341,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .tree-cell.code-bg .code{background:#fff;color:#1f7a52;border:1.5px solid #6fc29a;padding:1px 6px;border-radius:8px;font-weight:800;}
 .tree-cell.code-fr .code{background:#fff;color:#2f5aa8;border:1.5px solid #8aa6dc;padding:1px 6px;border-radius:8px;font-weight:800;}
 .tree-cell.code-linda .code{background:#fff;color:#c01f74;border:1.5px solid #e9a8cc;padding:1px 6px;border-radius:8px;font-weight:800;}
+.tree-cell.code-bee .code{background:#fff;color:#a86a1c;border:1.5px solid #e3b878;padding:1px 6px;border-radius:8px;font-weight:800;}
 .tree-cell.me-here .svgwrap{filter:drop-shadow(0 0 0 3px #e4572e);}
 .tree-cell.me-here::after{content:'📍';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:20px;animation:mehere 1s infinite;}
 @keyframes mehere{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-4px);}}

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -511,7 +511,8 @@
   function markCodeColor(mark) {
     return (mark === 'ring_bg' || mark === 'flag_bg') ? ' code-bg'
       : (mark === 'ring_fr' || mark === 'flag_fr') ? ' code-fr'
-        : (mark === 'ring_linda' || mark === 'flower') ? ' code-linda' : '';
+        : (mark === 'ring_linda' || mark === 'flower') ? ' code-linda'
+          : mark === 'bee' ? ' code-bee' : '';
   }
   // CSS клас за оцветяване на етикета (по избор на админ: авто/без/конкретен цвят)
   function labelClsFor(label, mark) {
@@ -519,6 +520,7 @@
     if (label === 'green') return ' code-bg';
     if (label === 'blue') return ' code-fr';
     if (label === 'pink') return ' code-linda';
+    if (label === 'orange') return ' code-bee';
     return markCodeColor(mark); // auto
   }
   // пълно SVG дърво: (бордър) + форма + цвят (здраве/свежест) + знак
@@ -2307,7 +2309,8 @@
     { id: 'none', name: 'Без оцветяване' },
     { id: 'green', name: '🟢 Зелен' },
     { id: 'blue', name: '🔵 Син' },
-    { id: 'pink', name: '🩷 Розов' }
+    { id: 'pink', name: '🩷 Розов' },
+    { id: 'orange', name: '🟠 Оранжев/кафяв' }
   ];
   function varietyPreviewInner(shape, mark, letter, border, label) {
     return '<div class="tree-cell' + markRingCls(mark) + labelClsFor(label, mark) + '" style="width:64px;margin:0 auto">' +
