@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.95.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.95.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -536,7 +536,7 @@
 
   function landmarkPrefKey() { return 'walnut_landmarks_' + (db.currentUserId || ''); }
   // по подразбиране ориентирите се виждат (освен ако потребителят ги е изключил)
-  function landmarksVisible() { try { return localStorage.getItem(landmarkPrefKey()) === '1'; } catch (e) { return false; } }
+  function landmarksVisible() { try { return localStorage.getItem(landmarkPrefKey()) !== '0'; } catch (e) { return true; } }
   function setLandmarksVisible(on) { try { localStorage.setItem(landmarkPrefKey(), on ? '1' : '0'); } catch (e) {} }
   function lmById(id) { return (db.settings.landmarks || []).find(function (m) { return m.id === id; }); }
 
