@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1102,6 +1102,7 @@
     return '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
       '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
       '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
+      '<span class="legend-br"></span>' +
       '<span class="ped">' + beeIconSVG() + 'Педро</span>' +
       varietyLegend();
   }
