@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Преглед: Педро с пчеличка</title>
+<style>
+  :root{--green:#2f9e52;--green-dark:#1f7a43;--muted:#6f7d73;--line:#dfe5e0;--card:#fff;--ink:#1e2a22;--bg:#eef3ee;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding:18px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  p.sub{margin:0 0 18px;color:var(--muted);font-size:14px;}
+  .grid-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
+  .opt{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;}
+  .opt.current{border-color:#e4b06b;}
+  .opt.pick{border-color:#2f9e52;}
+  .opt .tag{position:absolute;top:-10px;left:12px;font-size:11px;font-weight:800;color:#fff;padding:2px 8px;border-radius:10px;background:#1f7a43;}
+  .opt.current .tag{background:#c98a2e;}
+  .opt.pick .tag{background:#2f9e52;}
+  .opt h3{margin:4px 0 0;font-size:14px;text-align:center;}
+  .opt .desc{font-size:11px;color:var(--muted);text-align:center;line-height:1.3;}
+  .tree-cell{width:100%;max-width:92px;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .tree-cell .svgwrap{width:100%;max-width:64px;aspect-ratio:1;}
+  .tree-cell .code{font-size:11px;font-weight:700;color:#8a6d2f;background:#fff;border:1.5px solid #c9a96a;padding:1px 7px;border-radius:8px;line-height:1;}
+  .small-badge .svgwrap{border:2px solid #ead9bb;border-radius:50%;padding:4px;background:#fdfaf4;}
+  .note{margin-top:22px;font-size:13px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;line-height:1.5;}
+  .cmp{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;}
+  .cmp .mini{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--muted);}
+  .cmp .mini .svgwrap{width:48px;height:48px;}
+</style>
+</head>
+<body>
+  <h1>Педро с пчеличка 🐝</h1>
+  <p class="sub">Вляво е сегашното Педро (бежов пръстен). Отдясно — с пчеличка-значка: в нормален и в малко по-голям размер.</p>
+
+  <div class="grid-opts">
+    <div class="opt current">
+      <span class="tag">СЕГА</span>
+      <div class="tree-cell small-badge"><div class="svgwrap" id="cur"></div><span class="code">Д3</span></div>
+      <h3>Бежов пръстен</h3>
+      <div class="desc">Текущият вид на Педро.</div>
+    </div>
+
+    <div class="opt pick">
+      <span class="tag">ПЧЕЛИЧКА</span>
+      <div class="tree-cell"><div class="svgwrap" id="bee1"></div><span class="code">Д3</span></div>
+      <h3>Пчеличка (нормален знак)</h3>
+      <div class="desc">Без пръстен — малка пчеличка горе вдясно на короната.</div>
+    </div>
+
+    <div class="opt pick">
+      <span class="tag">ПЧЕЛИЧКА +</span>
+      <div class="tree-cell"><div class="svgwrap" id="bee2"></div><span class="code">Д3</span></div>
+      <h3>Пчеличка (малко по-голям знак)</h3>
+      <div class="desc">Същото, но всички значки с ~15% по-големи.</div>
+    </div>
+
+    <div class="opt pick">
+      <span class="tag">+ ПРЪСТЕН</span>
+      <div class="tree-cell small-badge"><div class="svgwrap" id="bee3"></div><span class="code">Д3</span></div>
+      <h3>Пчеличка + бежов пръстен</h3>
+      <div class="desc">Ако искаш да запазим и пръстена, и да добавим пчеличка.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Как ще изглеждат другите знаци по-големи:</b> за сравнение как ще се виждат българско/френско знаменце и цветче с новия (по-голям) размер.
+    <div class="cmp" id="cmpRow"></div>
+  </div>
+
+<script>
+  var GREEN = ['#4bb869','#2f9e52','#1f7a43'];
+  // стандартната корона от приложението
+  function crown(c){
+    return '<rect x="29" y="42" width="6" height="16" rx="2" fill="#8a5a3b"/>'+
+      '<circle cx="22" cy="30" r="14" fill="'+c[2]+'"/>'+
+      '<circle cx="42" cy="30" r="14" fill="'+c[1]+'"/>'+
+      '<circle cx="32" cy="20" r="15" fill="'+c[0]+'"/>'+
+      '<circle cx="32" cy="30" r="13" fill="'+c[1]+'"/>';
+  }
+  // пчеличка-значка, гледаща нагоре (глава горе), центрирана около (0,0)
+  function beeMark(){
+    return '<g>'+
+      // антенки
+      '<path d="M-1.3 -8.4 q-1.4 -2.4 -3 -2.9" fill="none" stroke="#241b0e" stroke-width="0.7"/>'+
+      '<path d="M1.3 -8.4 q1.4 -2.4 3 -2.9" fill="none" stroke="#241b0e" stroke-width="0.7"/>'+
+      '<circle cx="-4.3" cy="-11.5" r="0.9" fill="#241b0e"/>'+
+      '<circle cx="4.3" cy="-11.5" r="0.9" fill="#241b0e"/>'+
+      // крилца
+      '<ellipse cx="-5.2" cy="-1.4" rx="3.4" ry="4.9" fill="#e9f4fc" stroke="#a9cbe4" stroke-width="0.6" transform="rotate(-22 -5.2 -1.4)"/>'+
+      '<ellipse cx="5.2" cy="-1.4" rx="3.4" ry="4.9" fill="#e9f4fc" stroke="#a9cbe4" stroke-width="0.6" transform="rotate(22 5.2 -1.4)"/>'+
+      // глава
+      '<circle cx="0" cy="-6.4" r="2.9" fill="#241b0e"/>'+
+      '<circle cx="-1" cy="-7" r="0.6" fill="#fff"/>'+
+      // тяло
+      '<ellipse cx="0" cy="1.8" rx="5" ry="6.6" fill="#f4c23a" stroke="#2b2111" stroke-width="0.9"/>'+
+      // ивици (хоризонтални)
+      '<path d="M-4.4 -1.2 H4.4" stroke="#2b2111" stroke-width="1.7"/>'+
+      '<path d="M-4.4 4.6 H4.4" stroke="#2b2111" stroke-width="1.7"/>'+
+      // жило
+      '<path d="M0 8.6 l-1.3 2.8 2.6 0 z" fill="#2b2111"/>'+
+      '</g>';
+  }
+  function treeBee(c, scale){
+    var bx=47,by=13, s=scale||1;
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+crown(c)+
+      '<g transform="translate('+bx+','+by+') scale('+s+')">'+beeMark()+'</g>'+
+      '</svg>';
+  }
+  function treeStd(c){ return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+crown(c)+'</svg>'; }
+
+  document.getElementById('cur').innerHTML  = treeStd(GREEN);
+  document.getElementById('bee1').innerHTML = treeBee(GREEN, 1.18);
+  document.getElementById('bee2').innerHTML = treeBee(GREEN, 1.35);
+  document.getElementById('bee3').innerHTML = treeBee(GREEN, 1.35);
+
+  // долен ред: знаци по-големи
+  function flagBG(){return '<g><rect x="40.5" y="2" width="2.2" height="25" rx="0.9" fill="#6b5330"/><rect x="42.6" y="2.4" width="19.5" height="5.3" fill="#fff"/><rect x="42.6" y="7.7" width="19.5" height="5.3" fill="#2f9e52"/><rect x="42.6" y="13" width="19.5" height="5.3" fill="#d32f2f"/><rect x="42.6" y="2.4" width="19.5" height="15.9" fill="none" stroke="#111" stroke-width="0.8"/></g>';}
+  function flagFR(){return '<g><rect x="40.5" y="2" width="2.2" height="25" rx="0.9" fill="#6b5330"/><rect x="42.6" y="2.4" width="6.5" height="15" fill="#2b4b9b"/><rect x="49.1" y="2.4" width="6.5" height="15" fill="#fff"/><rect x="55.6" y="2.4" width="6.5" height="15" fill="#d32f2f"/><rect x="42.6" y="2.4" width="19.5" height="15" fill="none" stroke="#111" stroke-width="0.8"/></g>';}
+  function flower(){return '<g transform="translate(45,12)"><g fill="#ef73b0" stroke="#fff" stroke-width="0.7"><circle cx="0" cy="-6.6" r="4.2"/><circle cx="6.3" cy="-2" r="4.2"/><circle cx="3.9" cy="5.4" r="4.2"/><circle cx="-3.9" cy="5.4" r="4.2"/><circle cx="-6.3" cy="-2" r="4.2"/></g><circle cx="0" cy="0" r="3.4" fill="#ffd34d" stroke="#fff" stroke-width="0.7"/></g>';}
+  function treeEmblem(c, inner, scale){
+    var s=scale||1;
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">'+crown(c)+
+      '<g transform="translate(52,10) scale('+s+') translate(-52,-10)">'+inner+'</g></svg>';
+  }
+  var cmp = document.getElementById('cmpRow');
+  function mini(label, svg){var d=document.createElement('div');d.className='mini';d.innerHTML='<div class="svgwrap">'+svg+'</div>'+label;return d;}
+  cmp.appendChild(mini('БГ сега', treeEmblem(GREEN, flagBG(), 1)));
+  cmp.appendChild(mini('БГ по-голямо', treeEmblem(GREEN, flagBG(), 1.18)));
+  cmp.appendChild(mini('ФР по-голямо', treeEmblem(GREEN, flagFR(), 1.18)));
+  cmp.appendChild(mini('Цветче по-голямо', treeEmblem(GREEN, flower(), 1.18)));
+</script>
+</body>
+</html>

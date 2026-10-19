@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.98.9';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -435,6 +435,7 @@
     { id: 'ring_fr', name: 'Пръстен ФР (трикольор)' },
     { id: 'ring_linda', name: 'Пръстен Линда (розов)' },
     { id: 'flower', name: '🌸 Цветче' },
+    { id: 'bee', name: '🐝 Пчеличка' },
     { id: 'letter', name: 'Кръгче с буква' }
   ];
   // ===== Бордър около короната (по избор на админ) =====
@@ -473,12 +474,33 @@
     return '<g transform="translate(47,9)"><circle r="7.5" fill="#d6559b" stroke="#fff" stroke-width="1.4"/>' +
       '<text x="0" y="3.4" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="sans-serif">' + esc(letter || '') + '</text></g>';
   }
+  // пчеличка, гледаща нагоре (глава горе) — центрирана около (0,0)
+  function emblemBee() {
+    return '<g>' +
+      '<path d="M-1.3 -8.4 q-1.4 -2.4 -3 -2.9" fill="none" stroke="#241b0e" stroke-width="0.7"/>' +
+      '<path d="M1.3 -8.4 q1.4 -2.4 3 -2.9" fill="none" stroke="#241b0e" stroke-width="0.7"/>' +
+      '<circle cx="-4.3" cy="-11.5" r="0.9" fill="#241b0e"/>' +
+      '<circle cx="4.3" cy="-11.5" r="0.9" fill="#241b0e"/>' +
+      '<ellipse cx="-5.2" cy="-1.4" rx="3.4" ry="4.9" fill="#e9f4fc" stroke="#a9cbe4" stroke-width="0.6" transform="rotate(-22 -5.2 -1.4)"/>' +
+      '<ellipse cx="5.2" cy="-1.4" rx="3.4" ry="4.9" fill="#e9f4fc" stroke="#a9cbe4" stroke-width="0.6" transform="rotate(22 5.2 -1.4)"/>' +
+      '<circle cx="0" cy="-6.4" r="2.9" fill="#241b0e"/>' +
+      '<circle cx="-1" cy="-7" r="0.6" fill="#fff"/>' +
+      '<ellipse cx="0" cy="1.8" rx="5" ry="6.6" fill="#f4c23a" stroke="#2b2111" stroke-width="0.9"/>' +
+      '<path d="M-4.4 -1.2 H4.4" stroke="#2b2111" stroke-width="1.7"/>' +
+      '<path d="M-4.4 4.6 H4.4" stroke="#2b2111" stroke-width="1.7"/>' +
+      '<path d="M0 8.6 l-1.3 2.8 2.6 0 z" fill="#2b2111"/>' +
+      '</g>';
+  }
   function emblemInner(mark, letter) {
-    return mark === 'flag_bg' ? emblemBG()
+    if (mark === 'bee') return '<g transform="translate(47,13) scale(1.35)">' + emblemBee() + '</g>';
+    var inner = mark === 'flag_bg' ? emblemBG()
       : mark === 'flag_fr' ? emblemFR()
         : mark === 'flower' ? emblemFlower()
           : mark === 'letter' ? emblemLetter(letter)
             : '';
+    if (!inner) return '';
+    // всички знаци една идея по-големи
+    return '<g transform="translate(52,10) scale(1.18) translate(-52,-10)">' + inner + '</g>';
   }
   // CSS клас за цветния пръстен (ring_*), ако е избран
   function markRingCls(mark) {
@@ -511,6 +533,7 @@
     if (n.indexOf('българ') !== -1 || n.indexOf('bulgar') !== -1) return 'ring_bg';
     if (n.indexOf('френск') !== -1 || n.indexOf('french') !== -1 || n.indexOf('franc') !== -1) return 'ring_fr';
     if (n.indexOf('линда') !== -1 || n.indexOf('linda') !== -1) return 'ring_linda';
+    if (n.indexOf('педро') !== -1 || n.indexOf('pedro') !== -1) return 'bee';
     return 'none';
   }
   function varShape(v) {
@@ -1054,6 +1077,10 @@
   // =======================================================================
   //  HOME / MAP
   // =======================================================================
+  // малка пчеличка-иконка за легендата (идентификатор на Педро)
+  function beeIconSVG() {
+    return '<svg class="bee-ico" viewBox="-13 -14 26 28" width="17" height="17">' + emblemBee() + '</svg>';
+  }
   // Легендата под картата — броячите се филтрират по избрания сорт (fVar)
   function mapLegend(fVar, mode) {
     var trees = db.trees.filter(function (t) { return !t.deletedAt && (!fVar || t.varietyId === fVar); });
@@ -1074,7 +1101,9 @@
     return '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
       '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
       '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
-      '<span><i class="dotc" style="background:#c9a96a"></i>Педро</span>' + varietyLegend();
+      varietyLegend() +
+      '<span class="legend-br"></span>' +
+      '<span>' + beeIconSVG() + 'Педро</span>';
   }
 
   // Опциите на филтъра по сорт — с брой дървета, динамично спрямо фитъра по здраве
