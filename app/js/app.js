@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -499,8 +499,9 @@
           : mark === 'letter' ? emblemLetter(letter)
             : '';
     if (!inner) return '';
-    // всички знаци една идея по-големи
-    return '<g transform="translate(52,10) scale(1.18) translate(-52,-10)">' + inner + '</g>';
+    // всички знаци една идея по-големи; център на скалиране по-наляво (56),
+    // за да не се отрязва десният черен бордър на знамената от ръба на viewBox
+    return '<g transform="translate(56,10) scale(1.18) translate(-56,-10)">' + inner + '</g>';
   }
   // CSS клас за цветния пръстен (ring_*), ако е избран
   function markRingCls(mark) {
