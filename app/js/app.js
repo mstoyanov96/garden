@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.96.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.97.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -44,6 +44,7 @@
   var editMode = false;     // редактиране на схемата (само админ)
   var editingLmId = null;   // id на ориентира, който в момента се наглася (за подсветка)
   var editingLmKind = null; // вид на наглася ориентир (за смяна на цвят)
+  var lmStep = 'coarse';    // стъпка при местене на ориентир: 'coarse' (едро) или 'fine' (дребно)
   var pendingPhotoSrc = null; // избраната профилна снимка, докато се наглася вертикално
   var ppImgW = 0, ppImgH = 0; // размери на избраната снимка (за наместване: зуум + местене)
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
@@ -821,6 +822,7 @@
   // =======================================================================
   function go(name, param) {
     if (route.name === 'walk' && name !== 'walk') stopWalk();
+    if (editingLmId) closeLmEditor();
     if (name !== 'home' && mapSelected.length) clearMapSelect();
     if (name === 'harvest') harvestScreen = 'none'; // екран „Действия“ се отваря без избран таб
     if (name === 'log') markLogOpened(); // влизане в дневника → маркирай като видяно и махни бройката
@@ -854,6 +856,7 @@
   // назад през историята (телефонен бутон „назад“ и iOS суайп правят същото чрез popstate)
   function goBack() {
     if (isLightboxOpen()) { closeLightbox(); return; }
+    if (editingLmId) { closeLmEditor(); return; }
     if (isSheetOpen()) { closeSheet(); return; }
     if (history.length > 1) history.back(); else go('home');
   }
@@ -864,6 +867,8 @@
     if (isLightboxOpen()) { closeLightbox(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     // ако има отворен лист (sheet) — затвори него и остани на същия изглед
     if (isSheetOpen()) { closeSheet(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
+    // ако се наглася ориентир — затвори панела и остани на картата
+    if (editingLmId) { closeLmEditor(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     var st = e.state && e.state.route;
     if (route.name === 'walk') stopWalk();
     if (mapSelected.length) clearMapSelect();
@@ -2704,7 +2709,7 @@
       case 'setcover': setCover(parts[1], parts[2]); break;
       case 'delphoto': removePhoto(parts[1], parts[2]); break;
 
-      case 'editschema': if (isAdmin()) { editMode = !editMode; render(); } break;
+      case 'editschema': if (isAdmin()) { editMode = !editMode; closeLmEditor(); render(); } break;
       case 'addtree': sheetAddTree(parts[1], parseInt(parts[2], 10)); break;
       case 'savenewtree': saveNewTree(parts[1], parseInt(parts[2], 10)); break;
       case 'edittree': sheetEditTree(parts[1]); break;
@@ -2720,9 +2725,10 @@
 
       case 'editlm': sheetEditLandmark(parts[1]); break;
       case 'lmnudge': nudgeLandmark(parts[1], parts[2]); break;
-      case 'lmjump': jumpLandmark(parts[1], parts[2]); break;
+      case 'lmstep': toggleLmStep(); break;
       case 'lmreset': resetLandmark(parts[1]); break;
       case 'lmcolorreset': resetLandmarkColor(parts[1]); break;
+      case 'closelmeditor': closeLmEditor(); break;
       case 'togglelandmarks': setLandmarksVisible(!landmarksVisible()); render(); break;
       case 'lmscaleup': setLmScale(lmScale() + 0.1); break;
       case 'lmscaledown': setLmScale(lmScale() - 0.1); break;
@@ -2997,54 +3003,62 @@
   }
 
   // ---- Landmarks (ориентири) — фино наместване (admin) -------------------
+  // плаващ панел със стрелки — винаги се вижда и лесно се затваря
   function sheetEditLandmark(id) {
     if (!isAdmin()) return;
     var m = lmById(id); if (!m) return;
     editingLmId = id; editingLmKind = m.kind;
     var name = LM_LABELS[m.kind] || 'Ориентир';
-    openSheet('<h3>' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span> ' : '') + esc(name) + '</h3>' +
-      '<p class="muted mb" style="font-size:13px">Намести ориентира точно където е на място. Избраният ориентир мига на картата, за да го виждаш. „Фино" мести по мъничко, „По-голяма стъпка" прескача цяла клетка.</p>' +
-      '<div class="field"><label>🎨 Цвят на значката</label>' +
-      '<div class="row" style="align-items:center;gap:12px">' +
-      '<input id="lmColor" type="color" value="' + lmColor(m.kind) + '" style="width:54px;height:40px;border:none;background:none;padding:0;cursor:pointer"/>' +
-      '<button class="btn ghost sm" data-action="lmcolorreset:' + id + '">↺ Стандартен цвят</button>' +
-      '</div></div>' +
-      '<div class="field"><label>Фино наместване</label><div class="move-pad">' +
-      '<span class="sp"></span><button data-action="lmnudge:' + id + ':up">↑</button><span class="sp"></span>' +
-      '<button data-action="lmnudge:' + id + ':left">←</button><span class="sp"></span><button data-action="lmnudge:' + id + ':right">→</button>' +
-      '<span class="sp"></span><button data-action="lmnudge:' + id + ':down">↓</button><span class="sp"></span>' +
-      '</div></div>' +
-      '<div class="field"><label>По-голяма стъпка</label><div class="move-pad">' +
-      '<span class="sp"></span><button data-action="lmjump:' + id + ':up">↑</button><span class="sp"></span>' +
-      '<button data-action="lmjump:' + id + ':left">←</button><span class="sp"></span><button data-action="lmjump:' + id + ':right">→</button>' +
-      '<span class="sp"></span><button data-action="lmjump:' + id + ':down">↓</button><span class="sp"></span>' +
-      '</div></div>' +
-      '<button class="btn ghost mt" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>' +
-      '<button class="btn mt" data-action="closesheet">Готово</button>', true);
+    var ed = el('lmEditor');
+    if (!ed) {
+      ed = document.createElement('div');
+      ed.id = 'lmEditor';
+      ed.className = 'lm-editor';
+      document.body.appendChild(ed);
+    }
+    var fine = lmStep === 'fine';
+    ed.innerHTML =
+      '<div class="lm-ed-head">' +
+      '<span class="lm-ed-title">' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span>' : '') + esc(name) + '</span>' +
+      '<label class="lm-ed-color"><input id="lmColor" type="color" value="' + lmColor(m.kind) + '"/></label>' +
+      '<button class="lm-ed-btn" data-action="lmcolorreset:' + id + '" title="Стандартен цвят">🎨↺</button>' +
+      '<button class="lm-ed-close" data-action="closelmeditor" aria-label="Затвори">✕</button>' +
+      '</div>' +
+      '<div class="lm-pad">' +
+      '<span></span><button data-action="lmnudge:' + id + ':up">↑</button><span></span>' +
+      '<button data-action="lmnudge:' + id + ':left">←</button>' +
+      '<button class="lm-step" data-action="lmstep">' + (fine ? '••<br><small>дребно</small>' : '•<br><small>едро</small>') + '</button>' +
+      '<button data-action="lmnudge:' + id + ':right">→</button>' +
+      '<span></span><button data-action="lmnudge:' + id + ':down">↓</button><span></span>' +
+      '</div>' +
+      '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>';
     updateMap();
     scrollEditingLandmark();
   }
 
-  // скролва нагласяния ориентир в горната видима част, за да не го крие менюто отдолу
+  function closeLmEditor() {
+    var ed = el('lmEditor');
+    if (ed) ed.remove();
+    if (editingLmId) { editingLmId = null; editingLmKind = null; updateMap(); }
+  }
+
+  // скролва нагласяния ориентир в горната видима част, за да не го крие панелът отдолу
   function scrollEditingLandmark() {
     try {
       requestAnimationFrame(function () {
-        var list = db.settings.landmarks || [];
-        var m = list.filter(function (x) { return x.id === editingLmId; })[0];
-        if (!m) return;
-        var cells = document.querySelectorAll('.lm.lm-editing');
-        var elLm = cells[0];
+        var elLm = document.querySelector('.lm.lm-editing');
         if (!elLm) return;
         var r = elLm.getBoundingClientRect();
-        var target = window.innerHeight * 0.22; // горна четвърт на екрана
-        window.scrollBy({ top: r.top - target, left: 0, behavior: 'smooth' });
+        var target = window.innerHeight * 0.28; // горна трета на екрана
+        var dy = r.top - target;
+        if (Math.abs(dy) > 12) window.scrollBy({ top: dy, left: 0, behavior: 'smooth' });
       });
     } catch (e) {}
   }
 
   function nudgeLandmark(id, dir) {
     var m = lmById(id); if (!m) return;
-    var step = 2;
+    var step = lmStep === 'fine' ? 2 : 12;
     if (dir === 'up') m.dy = (m.dy || 0) - step;
     else if (dir === 'down') m.dy = (m.dy || 0) + step;
     else if (dir === 'left') m.dx = (m.dx || 0) - step;
@@ -3052,13 +3066,9 @@
     save(); updateMap(); scrollEditingLandmark();
   }
 
-  function jumpLandmark(id, dir) {
-    var m = lmById(id); if (!m) return;
-    if (dir === 'up') m.gr = Math.max(2, m.gr - 1);
-    else if (dir === 'down') m.gr = m.gr + 1;
-    else if (dir === 'left') m.gc = Math.max(2, m.gc - 2);
-    else if (dir === 'right') m.gc = m.gc + 2;
-    save(); updateMap(); scrollEditingLandmark();
+  function toggleLmStep() {
+    lmStep = lmStep === 'fine' ? 'coarse' : 'fine';
+    if (editingLmId) sheetEditLandmark(editingLmId);
   }
 
   function resetLandmark(id) {
