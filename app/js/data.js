@@ -39,6 +39,23 @@
     ];
   }
 
+  // Ориентири на картата (порти, цистерна, спирка, гнездо).
+  // gr=grid-ред, gc=grid-колона (в полу-колони, span 2); dx/dy=фино изместване в px.
+  // anchor=как се закотвя в клетката: tl,r,re,b,c,t
+  function defaultLandmarks() {
+    return [
+      { id: 'lm_gate_top', kind: 'gate', anchor: 'tl', gr: 2, gc: 4, dx: -7, dy: -14 },
+      { id: 'lm_cistern', kind: 'cistern', anchor: 'b', gr: 2, gc: 5, dx: 7, dy: -3 },
+      { id: 'lm_gate_a', kind: 'gate', anchor: 'r', gr: 2, gc: 18, dx: 14, dy: 0 },
+      { id: 'lm_gate_b', kind: 'gate', anchor: 'r', gr: 3, gc: 18, dx: 14, dy: 0 },
+      { id: 'lm_gate_g', kind: 'gate', anchor: 'r', gr: 5, gc: 18, dx: 14, dy: 0 },
+      { id: 'lm_gate_d', kind: 'gate', anchor: 'r', gr: 6, gc: 18, dx: 14, dy: 0 },
+      { id: 'lm_gate_ik', kind: 'gate', anchor: 're', gr: 11, gc: 18, dx: 14, dy: -11 },
+      { id: 'lm_stop', kind: 'stop', anchor: 'c', gr: 11, gc: 13, dx: 0, dy: 17 },
+      { id: 'lm_nest', kind: 'nest', anchor: 't', gr: 9, gc: 15, dx: 2, dy: -11 }
+    ];
+  }
+
   // ---- Seed ---------------------------------------------------------------
   function seed() {
     var varieties = [
@@ -113,7 +130,8 @@
         yieldInputKg: 10,     // вход за рандеман (сухи с черупка)
         yieldOutputKg: 4.8,   // изход (чиста ядка)
         shellYield: 0.5,      // колко обелени кофи излизат от 1 зелена кофа
-        zones: defaultZones()
+        zones: defaultZones(),
+        landmarks: defaultLandmarks()
       },
       users: users,
       trees: trees,
@@ -139,6 +157,7 @@
     if (db.settings && !db.settings.zones) { db.settings.zones = defaultZones(); save(db); }
     if (db.settings && db.settings.zones) { var cp = db.settings.zones.filter(function (z) { return z.kind === 'coop' && z.label === 'Кокошки'; }); if (cp.length) { cp.forEach(function (z) { z.label = 'Кошита'; }); save(db); } }
     if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
+    if (db.settings && !db.settings.landmarks) { db.settings.landmarks = defaultLandmarks(); save(db); }
     if (!db.photos) { db.photos = []; save(db); }
     return db;
   }
@@ -181,6 +200,7 @@
     reset: reset,
     seed: seed,
     defaultZones: defaultZones,
+    defaultLandmarks: defaultLandmarks,
     migratePhotos: migratePhotos
   };
 })(window);

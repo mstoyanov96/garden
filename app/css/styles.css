@@ -268,6 +268,26 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .grid .coop,.grid .dog{font-size:22px;}
 .grid .coop>span,.grid .dog>span{display:block;font-size:10px;font-weight:700;line-height:1.1;margin-top:1px;}
 
+/* ориентири на картата (порти, цистерна, спирка, гнездо) */
+.grid .lm{position:relative;z-index:3;pointer-events:none;display:flex;align-items:center;justify-content:center;
+  transform:translate(calc(var(--dx,0)*1px),calc(var(--dy,0)*1px));}
+.grid .lm.badge{width:19px;height:19px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);overflow:hidden;}
+.grid .lm.badge svg{width:13px;height:13px;display:block;flex:none;}
+.grid .lm.gate{background:#cfe8d6;width:23px;height:23px;}
+.grid .lm.gate svg{width:15px;height:15px;flex:none;}
+.grid .lm.cistern{background:var(--blue);}
+.grid .lm.stop{background:#17a08a;}
+.grid .lm.nest{background:#e4d2b2;}
+.grid .lm.lm-tl{align-self:start;justify-self:start;}
+.grid .lm.lm-r{align-self:center;justify-self:end;}
+.grid .lm.lm-re{align-self:start;justify-self:end;}
+.grid .lm.lm-b{align-self:end;justify-self:center;}
+.grid .lm.lm-c{align-self:center;justify-self:center;}
+.grid .lm.lm-t{align-self:start;justify-self:center;}
+.grid .lm.editable{pointer-events:auto;cursor:pointer;outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
+.lm-ico{display:inline-flex;width:22px;height:22px;vertical-align:middle;}
+.lm-ico svg{width:22px;height:22px;}
+
 .tree-cell{
   width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
   cursor:pointer;position:relative;

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.88.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.89.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -363,6 +363,34 @@
       : health === 'yellow' ? ['#f6c65a', '#f3b53c', '#d9962a']
         : ['#ec726b', '#e4584f', '#c23e36'];
     return treeSVGColors(c);
+  }
+
+  // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
+  var LM_ICONS = {
+    gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
+    cistern: '<svg viewBox="0 0 24 24"><path d="M12 3C12 3 5 11 5 15a7 7 0 0 0 14 0C19 11 12 3 12 3Z" fill="#fff"/></svg>',
+    stop: '<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="9" rx="2.2" fill="#fff"/><g fill="#f3b53c"><rect x="5" y="8.3" width="3" height="3" rx="0.6"/><rect x="9" y="8.3" width="3" height="3" rx="0.6"/><rect x="13" y="8.3" width="3" height="3" rx="0.6"/><rect x="17" y="8.3" width="2" height="3" rx="0.6"/></g><circle cx="7.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="7.5" cy="16.3" r="0.8" fill="#f3b53c"/><circle cx="16.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="16.5" cy="16.3" r="0.8" fill="#f3b53c"/></svg>',
+    nest: '<svg viewBox="0 0 24 24"><path d="M3 11c0 4 4 7 9 7s9-3 9-7Z" fill="#7a4a2f"/><ellipse cx="9.3" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/><ellipse cx="14.7" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/></svg>'
+  };
+  var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', stop: 'Спирка', nest: 'Гнездо' };
+
+  function landmarkPrefKey() { return 'walnut_landmarks_' + (db.currentUserId || ''); }
+  // по подразбиране ориентирите се виждат (освен ако потребителят ги е изключил)
+  function landmarksVisible() { try { return localStorage.getItem(landmarkPrefKey()) !== '0'; } catch (e) { return true; } }
+  function setLandmarksVisible(on) { try { localStorage.setItem(landmarkPrefKey(), on ? '1' : '0'); } catch (e) {} }
+  function lmById(id) { return (db.settings.landmarks || []).find(function (m) { return m.id === id; }); }
+
+  function landmarksHTML(edit) {
+    var list = db.settings.landmarks || [];
+    if (!list.length) return '';
+    return list.map(function (m) {
+      var act = edit ? ' data-action="editlm:' + m.id + '"' : '';
+      var ed = edit ? ' editable' : '';
+      var dx = m.dx || 0, dy = m.dy || 0;
+      return '<div class="lm badge ' + m.kind + ' lm-' + (m.anchor || 'c') + ed + '"' + act +
+        ' style="grid-row:' + m.gr + ';grid-column:' + m.gc + ' / span 2;--dx:' + dx + ';--dy:' + dy + '">' +
+        (LM_ICONS[m.kind] || '') + '</div>';
+    }).join('');
   }
 
   // ---- Event logging -----------------------------------------------------
@@ -727,6 +755,15 @@
     });
     return changed;
   }
+  // Облакът може да е без ориентири (стара структура) → добавяме стандартните.
+  function ensureLandmarks() {
+    if (!db.settings) return false;
+    if (!db.settings.landmarks || !db.settings.landmarks.length) {
+      db.settings.landmarks = DB.defaultLandmarks();
+      return true;
+    }
+    return false;
+  }
   // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
   function applyCloudSnapshot(cloud) {
     var keepUser = db.currentUserId;
@@ -740,10 +777,11 @@
     if (cloud.settings) db.settings = cloud.settings;
     db.currentUserId = keepUser;
     var fixed = normalizeZones();
+    var fixedLm = ensureLandmarks();
     DB.migratePhotos(db);
     DB.save(db);
-    if (fixed && window.Sync) window.Sync.push();
-    if (changed || fixed) render();
+    if ((fixed || fixedLm) && window.Sync) window.Sync.push();
+    if (changed || fixed || fixedLm) render();
     primeSeenEvents();   // след първоначалното зареждане приемаме всичко за видяно
     updateAppBadge();
   }
@@ -757,7 +795,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { var fixed = normalizeZones(); DB.migratePhotos(db); DB.save(db); if (fixed && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
+      onRemote: function () { var fixed = normalizeZones(); var fixedLm = ensureLandmarks(); DB.migratePhotos(db); DB.save(db); if ((fixed || fixedLm) && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
@@ -866,7 +904,7 @@
       '</div>' +
       (editMode ? '' : '<div class="seg"><button class="' + (mapMode === 'health' ? 'active' : '') + '" data-action="mapmode:health">🌳 Здраве</button>' +
         '<button class="' + (mapMode === 'harvest' ? 'active' : '') + '" data-action="mapmode:harvest">🧺 Събиране</button></div>') +
-      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, или зона (Градина, Къща…) за да ѝ смениш мястото и размера.</div>' : '') +
+      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, или ориентир (порта, цистерна, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
       (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar"><option value="">Всички сортове</option>' +
@@ -976,6 +1014,7 @@
         }
       }
     });
+    if (landmarksVisible() || edit) html += landmarksHTML(edit);
     html += '</div>';
     return html;
   }
@@ -1825,6 +1864,15 @@
       notifSettingsHtml() +
       '</div></div></details>' +
 
+      '<details class="sect"><summary>📍 Ориентири на картата</summary><div class="sect-body">' +
+      '<div class="card"><p class="muted mb" style="font-size:13px">Показвай ли ориентирите на картата — порти, цистерна 💧, спирка 🚌 и гнездо 🪹. Тази настройка е само за теб, на този телефон.</p>' +
+      '<div class="row" style="align-items:center;justify-content:space-between">' +
+      '<b style="font-size:15px">Показвай ориентирите</b>' +
+      '<button class="btn sm ' + (landmarksVisible() ? '' : 'secondary') + '" data-action="togglelandmarks">' + (landmarksVisible() ? '✅ Включено' : 'Изключено') + '</button></div>' +
+      (isAdmin() ? '<p class="muted" style="font-size:12px;margin:10px 0 0">Съвет: като админ влез в „✏️ Редактирай схемата" на картата и докосни ориентир, за да го наместиш много фино.</p>' : '') +
+      '</div>' +
+      '</div></details>' +
+
       '<details class="sect"><summary>�🔍 Размер на изгледа</summary><div class="sect-body">' +
       '<div class="card"><p class="muted mb" style="font-size:13px">Уголеми или смали всичко в приложението, за да се чете по-лесно.</p>' +
       '<div class="row" style="align-items:center">' +
@@ -2431,6 +2479,12 @@
       case 'addzone': addZone(); break;
       case 'delzone': deleteZone(parts[1]); break;
 
+      case 'editlm': sheetEditLandmark(parts[1]); break;
+      case 'lmnudge': nudgeLandmark(parts[1], parts[2]); break;
+      case 'lmjump': jumpLandmark(parts[1], parts[2]); break;
+      case 'lmreset': resetLandmark(parts[1]); break;
+      case 'togglelandmarks': setLandmarksVisible(!landmarksVisible()); render(); break;
+
       case 'care': careTab = parts[1]; careScope = 'all'; careTreePreset = ''; go('care'); break;
       case 'ctab': careTab = parts[1]; render(); break;
       case 'cscope': careScope = parts[1]; if (parts[1] !== 'trees') careTrees = []; render(); break;
@@ -2697,6 +2751,53 @@
     if (!confirm('Да изтрия ли зоната „' + z.label + '“?')) return;
     db.settings.zones = db.settings.zones.filter(function (x) { return x.id !== id; });
     save(); closeSheet(); render();
+  }
+
+  // ---- Landmarks (ориентири) — фино наместване (admin) -------------------
+  function sheetEditLandmark(id) {
+    if (!isAdmin()) return;
+    var m = lmById(id); if (!m) return;
+    var name = LM_LABELS[m.kind] || 'Ориентир';
+    openSheet('<h3>' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span> ' : '') + esc(name) + '</h3>' +
+      '<p class="muted mb" style="font-size:13px">Намести ориентира точно където е на място. „Фино" мести по мъничко, „По-голяма стъпка" прескача цяла клетка.</p>' +
+      '<div class="field"><label>Фино наместване</label><div class="move-pad">' +
+      '<span class="sp"></span><button data-action="lmnudge:' + id + ':up">↑</button><span class="sp"></span>' +
+      '<button data-action="lmnudge:' + id + ':left">←</button><span class="sp"></span><button data-action="lmnudge:' + id + ':right">→</button>' +
+      '<span class="sp"></span><button data-action="lmnudge:' + id + ':down">↓</button><span class="sp"></span>' +
+      '</div></div>' +
+      '<div class="field"><label>По-голяма стъпка</label><div class="move-pad">' +
+      '<span class="sp"></span><button data-action="lmjump:' + id + ':up">↑</button><span class="sp"></span>' +
+      '<button data-action="lmjump:' + id + ':left">←</button><span class="sp"></span><button data-action="lmjump:' + id + ':right">→</button>' +
+      '<span class="sp"></span><button data-action="lmjump:' + id + ':down">↓</button><span class="sp"></span>' +
+      '</div></div>' +
+      '<button class="btn ghost mt" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>' +
+      '<button class="btn mt" data-action="closesheet">Готово</button>', true);
+  }
+
+  function nudgeLandmark(id, dir) {
+    var m = lmById(id); if (!m) return;
+    var step = 2;
+    if (dir === 'up') m.dy = (m.dy || 0) - step;
+    else if (dir === 'down') m.dy = (m.dy || 0) + step;
+    else if (dir === 'left') m.dx = (m.dx || 0) - step;
+    else if (dir === 'right') m.dx = (m.dx || 0) + step;
+    save(); updateMap(); sheetEditLandmark(id);
+  }
+
+  function jumpLandmark(id, dir) {
+    var m = lmById(id); if (!m) return;
+    if (dir === 'up') m.gr = Math.max(2, m.gr - 1);
+    else if (dir === 'down') m.gr = m.gr + 1;
+    else if (dir === 'left') m.gc = Math.max(2, m.gc - 2);
+    else if (dir === 'right') m.gc = m.gc + 2;
+    save(); updateMap(); sheetEditLandmark(id);
+  }
+
+  function resetLandmark(id) {
+    var m = lmById(id); if (!m) return;
+    var def = (DB.defaultLandmarks() || []).find(function (d) { return d.id === id; });
+    if (def) { m.gr = def.gr; m.gc = def.gc; m.dx = def.dx; m.dy = def.dy; m.anchor = def.anchor; save(); updateMap(); }
+    sheetEditLandmark(id);
   }
 
   // ---- User management (owner) ------------------------------------------
