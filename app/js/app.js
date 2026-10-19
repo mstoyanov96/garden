@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.89.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.89.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1859,7 +1859,7 @@
       (isAdmin() ? '<button class="btn secondary mt" data-action="changemypass">🔑 Смени моята парола</button>' : '') +
       '</div></details>' +
 
-      '<details class="sect"><summary>� Известия</summary><div class="sect-body">' +
+      '<details class="sect"><summary>🔔 Известия</summary><div class="sect-body">' +
       '<div class="card"><p class="muted mb" style="font-size:13px">Получавай известие на този телефон, когато друг запише нещо в дневника (събиране, грижа, продажба и др.). Непрочетените се броят с червено балонче върху „📜 Дневник".</p>' +
       notifSettingsHtml() +
       '</div></div></details>' +
@@ -1873,7 +1873,7 @@
       '</div>' +
       '</div></details>' +
 
-      '<details class="sect"><summary>�🔍 Размер на изгледа</summary><div class="sect-body">' +
+      '<details class="sect"><summary>🔍 Размер на изгледа</summary><div class="sect-body">' +
       '<div class="card"><p class="muted mb" style="font-size:13px">Уголеми или смали всичко в приложението, за да се чете по-лесно.</p>' +
       '<div class="row" style="align-items:center">' +
       '<button class="btn secondary" data-action="zoomout">➖ По-малко</button>' +
