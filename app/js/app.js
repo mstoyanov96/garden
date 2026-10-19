@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.92.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.93.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -236,7 +236,7 @@
   function varDecor(v) {
     if (!v) return { cls: '', flag: '' };
     var m = varMark(v);
-    var cls = markRingCls(m) || markCodeCls(m);
+    var cls = markRingCls(m) + labelClsFor(varLabel(v), m);
     var flag = (m === 'ring_bg' || m === 'flag_bg') ? '🇧🇬'
       : (m === 'ring_fr' || m === 'flag_fr') ? '🇫🇷'
         : (m === 'ring_linda' || m === 'flower' || m === 'letter') ? '🌸' : '';
@@ -479,9 +479,19 @@
   function markRingCls(mark) {
     return mark === 'ring_bg' ? ' var-bg' : mark === 'ring_fr' ? ' var-fr' : mark === 'ring_linda' ? ' var-linda' : '';
   }
-  // CSS клас само за оцветяване на етикета (буквите) — за знаменцата, които нямат пръстен
-  function markCodeCls(mark) {
-    return (mark === 'flag_bg') ? ' code-bg' : (mark === 'flag_fr') ? ' code-fr' : '';
+  // автоматичен цвят на етикета според знака
+  function markCodeColor(mark) {
+    return (mark === 'ring_bg' || mark === 'flag_bg') ? ' code-bg'
+      : (mark === 'ring_fr' || mark === 'flag_fr') ? ' code-fr'
+        : (mark === 'ring_linda' || mark === 'flower') ? ' code-linda' : '';
+  }
+  // CSS клас за оцветяване на етикета (по избор на админ: авто/без/конкретен цвят)
+  function labelClsFor(label, mark) {
+    if (label === 'none') return '';
+    if (label === 'green') return ' code-bg';
+    if (label === 'blue') return ' code-fr';
+    if (label === 'pink') return ' code-linda';
+    return markCodeColor(mark); // auto
   }
   // пълно SVG дърво: (бордър) + форма + цвят (здраве/свежест) + знак
   function treeSVGFull(shape, c, mark, letter, border) {
@@ -505,6 +515,7 @@
   }
   function varLetter(v) { return v && v.name ? v.name.trim().charAt(0) : ''; }
   function varBorder(v) { return v && v.border ? v.border : 'none'; }
+  function varLabel(v) { return v && v.label ? v.label : 'auto'; }
 
   // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
   var LM_ICONS = {
@@ -2199,12 +2210,19 @@
   function closeSheet() { var s = el('sheet'); s.classList.remove('open'); s.classList.remove('peek'); s.innerHTML = ''; }
 
   // ---- Сортове (само админ; промените се синхронизират за всички) ----
-  function varietyPreviewInner(shape, mark, letter, border) {
-    return '<div class="tree-cell' + markRingCls(mark) + markCodeCls(mark) + '" style="width:64px;margin:0 auto">' +
+  var TREE_LABELS = [
+    { id: 'auto', name: 'Автоматично (по знака)' },
+    { id: 'none', name: 'Без оцветяване' },
+    { id: 'green', name: '🟢 Зелен' },
+    { id: 'blue', name: '🔵 Син' },
+    { id: 'pink', name: '🩷 Розов' }
+  ];
+  function varietyPreviewInner(shape, mark, letter, border, label) {
+    return '<div class="tree-cell' + markRingCls(mark) + labelClsFor(label, mark) + '" style="width:64px;margin:0 auto">' +
       '<div class="svgwrap">' + treeSVGFull(shape, healthColors('green'), mark, letter, borderColor(border)) + '</div>' +
       '<span class="code">' + esc((el('vName') ? el('vName').value : '').trim() || 'А') + '</span></div>';
   }
-  function varietyStyleFields(shape, mark, letter, border) {
+  function varietyStyleFields(shape, mark, letter, border, label) {
     return '<div class="field"><label>🌳 Форма на дървото</label><select id="vShape" class="input">' +
       TREE_SHAPES.map(function (s) { return '<option value="' + s.id + '"' + (s.id === shape ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') +
       '</select></div>' +
@@ -2214,14 +2232,18 @@
       '<div class="field"><label>⭕ Бордър около короната</label><select id="vBorder" class="input">' +
       TREE_BORDERS.map(function (b) { return '<option value="' + b.id + '"' + (b.id === border ? ' selected' : '') + '>' + b.name + '</option>'; }).join('') +
       '</select></div>' +
+      '<div class="field"><label>🔤 Оцветяване на етикета</label><select id="vLabel" class="input">' +
+      TREE_LABELS.map(function (l) { return '<option value="' + l.id + '"' + (l.id === label ? ' selected' : '') + '>' + l.name + '</option>'; }).join('') +
+      '</select></div>' +
       '<div class="field"><label>Преглед</label><div id="vPreview" style="padding:12px;background:#f5f8f5;border-radius:12px">' +
-      varietyPreviewInner(shape, mark, letter, border) + '</div></div>';
+      varietyPreviewInner(shape, mark, letter, border, label) + '</div></div>';
   }
   function updateVarietyPreview() {
     var sh = el('vShape'), mk = el('vMark'), pv = el('vPreview'); if (!sh || !mk || !pv) return;
     var bd = el('vBorder') ? el('vBorder').value : 'none';
+    var lb = el('vLabel') ? el('vLabel').value : 'auto';
     var nm = el('vName') ? el('vName').value : '';
-    pv.innerHTML = varietyPreviewInner(sh.value, mk.value, (nm || '').trim().charAt(0), bd);
+    pv.innerHTML = varietyPreviewInner(sh.value, mk.value, (nm || '').trim().charAt(0), bd, lb);
   }
   function sheetVarietyNew() {
     if (!isAdmin()) return;
@@ -2229,7 +2251,7 @@
       '<div class="field"><label>Име</label><input id="vName" class="input" placeholder="напр. Чандлър"/></div>' +
       '<div class="field"><label>Размер</label><select id="vSize" class="input"><option value="big">🌰 Едър сорт</option><option value="small">🥜 Дребен сорт</option></select></div>' +
       '<div class="field"><label>Бележка</label><input id="vNote" class="input" placeholder="напр. Големи орехи"/></div>' +
-      varietyStyleFields('round', 'none', '', 'none') +
+      varietyStyleFields('round', 'none', '', 'none', 'auto') +
       '<button class="btn" data-action="savevariety:new">💾 Добави сорт</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
@@ -2242,7 +2264,7 @@
       '<option value="big"' + (v.size === 'big' ? ' selected' : '') + '>🌰 Едър сорт</option>' +
       '<option value="small"' + (v.size === 'small' ? ' selected' : '') + '>🥜 Дребен сорт</option></select></div>' +
       '<div class="field"><label>Бележка</label><input id="vNote" class="input" value="' + esc(v.note || '') + '"/></div>' +
-      varietyStyleFields(varShape(v), varMark(v), varLetter(v), varBorder(v)) +
+      varietyStyleFields(varShape(v), varMark(v), varLetter(v), varBorder(v), varLabel(v)) +
       '<button class="btn" data-action="savevariety:' + v.id + '">💾 Запази</button>' +
       '<button class="btn danger mt" data-action="delvariety:' + v.id + '">🗑️ Изтрий сорта</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
@@ -2256,11 +2278,12 @@
     var shape = el('vShape') ? el('vShape').value : 'round';
     var mark = el('vMark') ? el('vMark').value : 'none';
     var border = el('vBorder') ? el('vBorder').value : 'none';
+    var label = el('vLabel') ? el('vLabel').value : 'auto';
     if (id === 'new') {
-      db.settings.varieties.push({ id: DB.uid('var'), name: name, size: size, note: note, shape: shape, mark: mark, border: border });
+      db.settings.varieties.push({ id: DB.uid('var'), name: name, size: size, note: note, shape: shape, mark: mark, border: border, label: label });
     } else {
       var v = variety(id); if (!v) return;
-      v.name = name; v.size = size; v.note = note; v.shape = shape; v.mark = mark; v.border = border;
+      v.name = name; v.size = size; v.note = note; v.shape = shape; v.mark = mark; v.border = border; v.label = label;
     }
     save(); closeSheet(); render();
   }
@@ -2540,7 +2563,7 @@
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
-    if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark' || e.target.id === 'vBorder')) updateVarietyPreview();
+    if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark' || e.target.id === 'vBorder' || e.target.id === 'vLabel')) updateVarietyPreview();
   });
   // жив преглед на знака при писане на име (за „кръгче с буква")
   document.addEventListener('input', function (e) {
