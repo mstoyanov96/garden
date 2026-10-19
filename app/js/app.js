@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.91.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.92.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -236,7 +236,7 @@
   function varDecor(v) {
     if (!v) return { cls: '', flag: '' };
     var m = varMark(v);
-    var cls = markRingCls(m);
+    var cls = markRingCls(m) || markCodeCls(m);
     var flag = (m === 'ring_bg' || m === 'flag_bg') ? '🇧🇬'
       : (m === 'ring_fr' || m === 'flag_fr') ? '🇫🇷'
         : (m === 'ring_linda' || m === 'flower' || m === 'letter') ? '🌸' : '';
@@ -411,6 +411,14 @@
           : shape === 'cone' ? shapeCone(c)
             : shapeRound(c);
   }
+  // контур (halo) около короната в цвят на бордъра — уголемена силуетна форма зад короната
+  function shapeHalo(shape, color) {
+    var f = ' fill="' + color + '"';
+    if (shape === 'oval') return '<ellipse cx="32" cy="28" rx="13.5" ry="22.5"' + f + '/>';
+    if (shape === 'cone') return '<path d="M32 1 L49.5 48 L14.5 48 Z"' + f + '/>';
+    if (shape === 'bushy') return '<circle cx="20" cy="34" r="14.6"' + f + '/><circle cx="44" cy="34" r="14.6"' + f + '/><circle cx="26" cy="24" r="14.6"' + f + '/><circle cx="40" cy="24" r="14.6"' + f + '/><circle cx="32" cy="30" r="16.6"' + f + '/>';
+    return '<circle cx="22" cy="30" r="16.4"' + f + '/><circle cx="42" cy="30" r="16.4"' + f + '/><circle cx="32" cy="20" r="17.4"' + f + '/>';
+  }
 
   // ===== Знаци по сорт (знаменце/цветче/кръгче — рисуват се върху короната) =====
   // забележка: „пръстените" (ring_*) са през CSS клас, не през SVG.
@@ -424,25 +432,37 @@
     { id: 'flower', name: '🌸 Цветче' },
     { id: 'letter', name: 'Кръгче с буква' }
   ];
+  // ===== Бордър около короната (по избор на админ) =====
+  var TREE_BORDERS = [
+    { id: 'none', name: 'Без бордър', color: '' },
+    { id: 'orange', name: '🟠 Оранжев', color: '#f08a24' },
+    { id: 'gold', name: '🟡 Златист', color: '#e3b23c' },
+    { id: 'green', name: '🟢 Зелен', color: '#2f9e52' },
+    { id: 'red', name: '🔴 Червен', color: '#d64545' },
+    { id: 'brown', name: '🟤 Кафяв', color: '#8a5a3b' }
+  ];
+  function borderColor(id) { var b = TREE_BORDERS.find(function (x) { return x.id === id; }); return b ? b.color : ''; }
   function emblemBG() {
-    return '<g><rect x="42" y="3" width="1.8" height="21" rx="0.8" fill="#6b5330"/>' +
-      '<g stroke="#fff" stroke-width="0.7">' +
-      '<rect x="43.6" y="3.2" width="16" height="4.3" fill="#fff"/>' +
-      '<rect x="43.6" y="7.5" width="16" height="4.3" fill="#2f9e52"/>' +
-      '<rect x="43.6" y="11.8" width="16" height="4.3" fill="#d32f2f"/></g></g>';
+    return '<g><rect x="40.5" y="2" width="2.2" height="25" rx="0.9" fill="#6b5330"/>' +
+      '<g stroke="#fff" stroke-width="0.5">' +
+      '<rect x="42.6" y="2.4" width="19.5" height="5.3" fill="#fff"/>' +
+      '<rect x="42.6" y="7.7" width="19.5" height="5.3" fill="#2f9e52"/>' +
+      '<rect x="42.6" y="13" width="19.5" height="5.3" fill="#d32f2f"/></g>' +
+      '<rect x="42.6" y="2.4" width="19.5" height="15.9" fill="none" stroke="#111" stroke-width="0.8"/></g>';
   }
   function emblemFR() {
-    return '<g><rect x="42" y="3" width="1.8" height="21" rx="0.8" fill="#6b5330"/>' +
-      '<g stroke="#fff" stroke-width="0.7">' +
-      '<rect x="43.6" y="3.2" width="5.3" height="12" fill="#2b4b9b"/>' +
-      '<rect x="48.9" y="3.2" width="5.3" height="12" fill="#fff"/>' +
-      '<rect x="54.2" y="3.2" width="5.3" height="12" fill="#d32f2f"/></g></g>';
+    return '<g><rect x="40.5" y="2" width="2.2" height="25" rx="0.9" fill="#6b5330"/>' +
+      '<g stroke="#fff" stroke-width="0.5">' +
+      '<rect x="42.6" y="2.4" width="6.5" height="15" fill="#2b4b9b"/>' +
+      '<rect x="49.1" y="2.4" width="6.5" height="15" fill="#fff"/>' +
+      '<rect x="55.6" y="2.4" width="6.5" height="15" fill="#d32f2f"/></g>' +
+      '<rect x="42.6" y="2.4" width="19.5" height="15" fill="none" stroke="#111" stroke-width="0.8"/></g>';
   }
   function emblemFlower() {
-    return '<g transform="translate(44,11)"><g fill="#ef73b0" stroke="#fff" stroke-width="0.6">' +
-      '<circle cx="0" cy="-5" r="3.2"/><circle cx="4.8" cy="-1.5" r="3.2"/><circle cx="3" cy="4.2" r="3.2"/>' +
-      '<circle cx="-3" cy="4.2" r="3.2"/><circle cx="-4.8" cy="-1.5" r="3.2"/></g>' +
-      '<circle cx="0" cy="0" r="2.6" fill="#ffd34d" stroke="#fff" stroke-width="0.6"/></g>';
+    return '<g transform="translate(45,12)"><g fill="#ef73b0" stroke="#fff" stroke-width="0.7">' +
+      '<circle cx="0" cy="-6.6" r="4.2"/><circle cx="6.3" cy="-2" r="4.2"/><circle cx="3.9" cy="5.4" r="4.2"/>' +
+      '<circle cx="-3.9" cy="5.4" r="4.2"/><circle cx="-6.3" cy="-2" r="4.2"/></g>' +
+      '<circle cx="0" cy="0" r="3.4" fill="#ffd34d" stroke="#fff" stroke-width="0.7"/></g>';
   }
   function emblemLetter(letter) {
     return '<g transform="translate(47,9)"><circle r="7.5" fill="#d6559b" stroke="#fff" stroke-width="1.4"/>' +
@@ -459,9 +479,14 @@
   function markRingCls(mark) {
     return mark === 'ring_bg' ? ' var-bg' : mark === 'ring_fr' ? ' var-fr' : mark === 'ring_linda' ? ' var-linda' : '';
   }
-  // пълно SVG дърво: форма + цвят (здраве/свежест) + знак
-  function treeSVGFull(shape, c, mark, letter) {
-    return '<svg viewBox="0 0 64 64" width="100%" height="100%">' + shapeInner(shape, c) + emblemInner(mark, letter) + '</svg>';
+  // CSS клас само за оцветяване на етикета (буквите) — за знаменцата, които нямат пръстен
+  function markCodeCls(mark) {
+    return (mark === 'flag_bg') ? ' code-bg' : (mark === 'flag_fr') ? ' code-fr' : '';
+  }
+  // пълно SVG дърво: (бордър) + форма + цвят (здраве/свежест) + знак
+  function treeSVGFull(shape, c, mark, letter, border) {
+    return '<svg viewBox="0 0 64 64" width="100%" height="100%">' +
+      (border ? shapeHalo(shape, border) : '') + shapeInner(shape, c) + emblemInner(mark, letter) + '</svg>';
   }
   // форма и знак за даден сорт (с обратна съвместимост по име/размер)
   function varMark(v) {
@@ -479,6 +504,7 @@
     return (v.size === 'small' && varMark(v) === 'none') ? 'oval' : 'round';
   }
   function varLetter(v) { return v && v.name ? v.name.trim().charAt(0) : ''; }
+  function varBorder(v) { return v && v.border ? v.border : 'none'; }
 
   // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
   var LM_ICONS = {
@@ -1110,6 +1136,7 @@
           var v = variety(t.varietyId);
           var dec = varDecor(v);
           var vShape = varShape(v), vMark = varMark(v), vLetter = varLetter(v);
+          var vBorder = borderColor(varBorder(v));
           var small = (!dec.cls && v && v.size === 'small' && vMark === 'none') ? ' small-badge' : '';
           var act = edit ? 'edittree:' + t.id : 'tree:' + t.id;
           var sel = (mapSelected.indexOf(t.id) !== -1) ? ' selected' : '';
@@ -1118,12 +1145,12 @@
           var svg, doneCls = '', ageHtml = '';
           if (mode === 'harvest') {
             var fresh = harvestFreshness(t.id);
-            svg = treeSVGFull(vShape, FRESH_COLORS[fresh], vMark, vLetter);
+            svg = treeSVGFull(vShape, FRESH_COLORS[fresh], vMark, vLetter, vBorder);
             if (harvestedToday(t.id)) doneCls = ' harvested-today';
             var al = harvestAgoLabel(t.id);
             if (al) ageHtml = '<span class="age ' + fresh + '">' + al + '</span>';
           } else {
-            svg = treeSVGFull(vShape, healthColors(t.health), vMark, vLetter);
+            svg = treeSVGFull(vShape, healthColors(t.health), vMark, vLetter, vBorder);
           }
           html += '<div class="tree-cell' + small + dec.cls + sel + doneCls + hl + '" id="cell_' + t.id + '" data-tid="' + t.id + '" data-action="' + act + '" style="grid-row:' + gr + ';grid-column:' + (2 * c) + ' / span 2;' + (dim ? 'opacity:.2' : '') + '">' +
             '<div class="svgwrap">' + svg + '</div><span class="code">' + esc(t.code) + '</span>' + ageHtml + hlBadge + '</div>';
@@ -1160,7 +1187,7 @@
       '<div class="card flush">' +
       (lastPhoto ? '<img class="detail-photo" src="' + lastPhoto.data + '" style="border-radius:0;cursor:pointer"' + (lastPhoto.id ? ' data-action="zoomphoto:' + t.id + ':' + lastPhoto.id + '"' : '') + '/>' :
         '<div class="detail-photo" style="display:flex;align-items:center;justify-content:center">' +
-        '<div style="width:90px;height:90px">' + treeSVGFull(varShape(v), healthColors(t.health), varMark(v), varLetter(v)) + '</div></div>') +
+        '<div style="width:90px;height:90px">' + treeSVGFull(varShape(v), healthColors(t.health), varMark(v), varLetter(v), borderColor(varBorder(v))) + '</div></div>') +
       '<div style="padding:16px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
       '<h2 style="font-size:22px">Дърво ' + esc(t.code) + '</h2>' +
@@ -2172,24 +2199,29 @@
   function closeSheet() { var s = el('sheet'); s.classList.remove('open'); s.classList.remove('peek'); s.innerHTML = ''; }
 
   // ---- Сортове (само админ; промените се синхронизират за всички) ----
-  function varietyPreviewInner(shape, mark, letter) {
-    return '<div class="tree-cell' + markRingCls(mark) + '" style="width:64px;margin:0 auto">' +
-      '<div class="svgwrap">' + treeSVGFull(shape, healthColors('green'), mark, letter) + '</div></div>';
+  function varietyPreviewInner(shape, mark, letter, border) {
+    return '<div class="tree-cell' + markRingCls(mark) + markCodeCls(mark) + '" style="width:64px;margin:0 auto">' +
+      '<div class="svgwrap">' + treeSVGFull(shape, healthColors('green'), mark, letter, borderColor(border)) + '</div>' +
+      '<span class="code">' + esc((el('vName') ? el('vName').value : '').trim() || 'А') + '</span></div>';
   }
-  function varietyStyleFields(shape, mark, letter) {
+  function varietyStyleFields(shape, mark, letter, border) {
     return '<div class="field"><label>🌳 Форма на дървото</label><select id="vShape" class="input">' +
       TREE_SHAPES.map(function (s) { return '<option value="' + s.id + '"' + (s.id === shape ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') +
       '</select></div>' +
       '<div class="field"><label>🚩 Знак на сорта</label><select id="vMark" class="input">' +
       TREE_MARKS.map(function (m) { return '<option value="' + m.id + '"' + (m.id === mark ? ' selected' : '') + '>' + m.name + '</option>'; }).join('') +
       '</select></div>' +
+      '<div class="field"><label>⭕ Бордър около короната</label><select id="vBorder" class="input">' +
+      TREE_BORDERS.map(function (b) { return '<option value="' + b.id + '"' + (b.id === border ? ' selected' : '') + '>' + b.name + '</option>'; }).join('') +
+      '</select></div>' +
       '<div class="field"><label>Преглед</label><div id="vPreview" style="padding:12px;background:#f5f8f5;border-radius:12px">' +
-      varietyPreviewInner(shape, mark, letter) + '</div></div>';
+      varietyPreviewInner(shape, mark, letter, border) + '</div></div>';
   }
   function updateVarietyPreview() {
     var sh = el('vShape'), mk = el('vMark'), pv = el('vPreview'); if (!sh || !mk || !pv) return;
+    var bd = el('vBorder') ? el('vBorder').value : 'none';
     var nm = el('vName') ? el('vName').value : '';
-    pv.innerHTML = varietyPreviewInner(sh.value, mk.value, (nm || '').trim().charAt(0));
+    pv.innerHTML = varietyPreviewInner(sh.value, mk.value, (nm || '').trim().charAt(0), bd);
   }
   function sheetVarietyNew() {
     if (!isAdmin()) return;
@@ -2197,7 +2229,7 @@
       '<div class="field"><label>Име</label><input id="vName" class="input" placeholder="напр. Чандлър"/></div>' +
       '<div class="field"><label>Размер</label><select id="vSize" class="input"><option value="big">🌰 Едър сорт</option><option value="small">🥜 Дребен сорт</option></select></div>' +
       '<div class="field"><label>Бележка</label><input id="vNote" class="input" placeholder="напр. Големи орехи"/></div>' +
-      varietyStyleFields('round', 'none', '') +
+      varietyStyleFields('round', 'none', '', 'none') +
       '<button class="btn" data-action="savevariety:new">💾 Добави сорт</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
@@ -2210,7 +2242,7 @@
       '<option value="big"' + (v.size === 'big' ? ' selected' : '') + '>🌰 Едър сорт</option>' +
       '<option value="small"' + (v.size === 'small' ? ' selected' : '') + '>🥜 Дребен сорт</option></select></div>' +
       '<div class="field"><label>Бележка</label><input id="vNote" class="input" value="' + esc(v.note || '') + '"/></div>' +
-      varietyStyleFields(varShape(v), varMark(v), varLetter(v)) +
+      varietyStyleFields(varShape(v), varMark(v), varLetter(v), varBorder(v)) +
       '<button class="btn" data-action="savevariety:' + v.id + '">💾 Запази</button>' +
       '<button class="btn danger mt" data-action="delvariety:' + v.id + '">🗑️ Изтрий сорта</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
@@ -2223,11 +2255,12 @@
     var note = (el('vNote').value || '').trim();
     var shape = el('vShape') ? el('vShape').value : 'round';
     var mark = el('vMark') ? el('vMark').value : 'none';
+    var border = el('vBorder') ? el('vBorder').value : 'none';
     if (id === 'new') {
-      db.settings.varieties.push({ id: DB.uid('var'), name: name, size: size, note: note, shape: shape, mark: mark });
+      db.settings.varieties.push({ id: DB.uid('var'), name: name, size: size, note: note, shape: shape, mark: mark, border: border });
     } else {
       var v = variety(id); if (!v) return;
-      v.name = name; v.size = size; v.note = note; v.shape = shape; v.mark = mark;
+      v.name = name; v.size = size; v.note = note; v.shape = shape; v.mark = mark; v.border = border;
     }
     save(); closeSheet(); render();
   }
@@ -2507,7 +2540,7 @@
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
-    if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark')) updateVarietyPreview();
+    if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark' || e.target.id === 'vBorder')) updateVarietyPreview();
   });
   // жив преглед на знака при писане на име (за „кръгче с буква")
   document.addEventListener('input', function (e) {
