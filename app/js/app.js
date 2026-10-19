@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.98.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.98.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1049,18 +1049,42 @@
   // =======================================================================
   //  HOME / MAP
   // =======================================================================
-  function viewHome() {
+  // Легендата под картата — броячите се филтрират по избрания сорт (fVar)
+  function mapLegend(fVar, mode) {
+    var trees = db.trees.filter(function (t) { return !t.deletedAt && (!fVar || t.varietyId === fVar); });
+    if (mode === 'harvest') {
+      var fr = { fresh: 0, week: 0, old: 0 }, doneToday = 0;
+      trees.forEach(function (t) {
+        var f = harvestFreshness(t.id);
+        if (f === 'today') fr.fresh++; else if (f === 'week') fr.week++; else fr.old++;
+        if (harvestedToday(t.id)) doneToday++;
+      });
+      return '<span><i class="dotc green"></i>Брано скоро (' + fr.fresh + ')</span>' +
+        '<span><i class="dotc yellow"></i>Тази седмица (' + fr.week + ')</span>' +
+        '<span><i class="dotc" style="background:#aab7af"></i>Отдавна / не е брано (' + fr.old + ')</span>' +
+        '<span>✅ Събрано днес (' + doneToday + ')</span>' + varietyLegend();
+    }
     var counts = { green: 0, yellow: 0, red: 0 };
-    db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) { counts[t.health]++; });
+    trees.forEach(function (t) { counts[t.health]++; });
+    return '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
+      '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
+      '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
+      '<span><i class="dotc" style="background:#c9a96a"></i>Педро</span>' + varietyLegend();
+  }
+
+  // Опциите на филтъра по сорт — с брой дървета, динамично спрямо фитъра по здраве
+  function varietyOptions(fVar, fHealth) {
+    var trees = db.trees.filter(function (t) { return !t.deletedAt && (!fHealth || t.health === fHealth); });
+    return '<option value=""' + (fVar ? '' : ' selected') + '>Всички сортове (' + trees.length + ')</option>' +
+      (db.settings.varieties || []).map(function (v) {
+        var n = trees.filter(function (t) { return t.varietyId === v.id; }).length;
+        return '<option value="' + v.id + '"' + (fVar === v.id ? ' selected' : '') + '>' + esc(v.name) + ' (' + n + ')</option>';
+      }).join('');
+  }
+
+  function viewHome() {
     var hv = harvestStats(statPeriod);
     var perLbl = periodShort(statPeriod);
-
-    var fr = { fresh: 0, week: 0, old: 0 }, doneToday = 0;
-    db.trees.filter(function (t) { return !t.deletedAt; }).forEach(function (t) {
-      var f = harvestFreshness(t.id);
-      if (f === 'today') fr.fresh++; else if (f === 'week') fr.week++; else fr.old++;
-      if (harvestedToday(t.id)) doneToday++;
-    });
 
     var greenBk = hv.buckets;
     var sh = shelledStats(statPeriod);
@@ -1093,24 +1117,13 @@
       (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, или ориентир (порта, цистерна, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
       (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
-        '<select class="input" id="fVar"><option value="">Всички сортове</option>' +
-        db.settings.varieties.map(function (v) { return '<option value="' + v.id + '">' + esc(v.name) + '</option>'; }).join('') + '</select>' +
+        '<select class="input" id="fVar">' + varietyOptions('', '') + '</select>' +
         (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
         '</div>') +
       (editMode ? '' : '<div class="map-tools-row"><button class="btn sm ' + (mapSelect ? '' : 'secondary') + '" data-action="mapselecttoggle">' + (mapSelect ? '✖ Изход от избор' : '☑️ Избери няколко дървета') + '</button>' +
         '<button class="btn sm secondary" data-action="groundquick">🍂 Събери от земята</button></div>') +
       '<div class="mapwrap" id="mapwrap">' + orchardGrid('', '', editMode, mapMode) + '</div>' +
-      (mapMode === 'harvest'
-        ? '<div class="legend">' +
-          '<span><i class="dotc green"></i>Брано скоро (' + fr.fresh + ')</span>' +
-          '<span><i class="dotc yellow"></i>Тази седмица (' + fr.week + ')</span>' +
-          '<span><i class="dotc" style="background:#aab7af"></i>Отдавна / не е брано (' + fr.old + ')</span>' +
-          '<span>✅ Събрано днес (' + doneToday + ')</span>' + varietyLegend() + '</div>'
-        : '<div class="legend">' +
-          '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
-          '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
-          '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
-          '<span><i class="dotc" style="background:#c9a96a"></i>Педро</span>' + varietyLegend() + '</div>') +
+      (editMode ? '' : '<div class="legend" id="mapLegend">' + mapLegend('', mapMode) + '</div>') +
 
 
       '</div>';
@@ -2446,8 +2459,14 @@
     if (fHealth) fHealth.onchange = updateMap;
   }
   function updateMap() {
+    var fVar = el('fVar') ? el('fVar').value : '';
+    var fHealth = el('fHealth') ? el('fHealth').value : '';
     var mw = el('mapwrap');
-    if (mw) mw.innerHTML = orchardGrid(el('fVar') ? el('fVar').value : '', el('fHealth') ? el('fHealth').value : '', editMode);
+    if (mw) mw.innerHTML = orchardGrid(fVar, fHealth, editMode);
+    var lg = el('mapLegend');
+    if (lg) lg.innerHTML = mapLegend(fVar, mapMode);
+    var fv = el('fVar');
+    if (fv) fv.innerHTML = varietyOptions(fVar, fHealth);
   }
 
   // разбивка на продажбите (транзакции) — отваря се от плочките „продадени" и „приходи" в Статистика
