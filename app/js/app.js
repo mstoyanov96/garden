@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -492,7 +492,7 @@
       '</g>';
   }
   function emblemInner(mark, letter) {
-    if (mark === 'bee') return '<g transform="translate(47,13) scale(1.35)">' + emblemBee() + '</g>';
+    if (mark === 'bee') return '<g transform="translate(47,13) scale(1.28)">' + emblemBee() + '</g>';
     var inner = mark === 'flag_bg' ? emblemBG()
       : mark === 'flag_fr' ? emblemFR()
         : mark === 'flower' ? emblemFlower()
@@ -1080,7 +1080,7 @@
   // =======================================================================
   // малка пчеличка-иконка за легендата (идентификатор на Педро)
   function beeIconSVG() {
-    return '<svg class="bee-ico" viewBox="-13 -14 26 28" width="17" height="17">' + emblemBee() + '</svg>';
+    return '<svg class="bee-ico" viewBox="-9.2 -14 18.4 28" width="11" height="17">' + emblemBee() + '</svg>';
   }
   // Легендата под картата — броячите се филтрират по избрания сорт (fVar)
   function mapLegend(fVar, mode) {
@@ -1102,9 +1102,8 @@
     return '<span><i class="dotc green"></i>Здраво (' + counts.green + ')</span>' +
       '<span><i class="dotc yellow"></i>За грижа (' + counts.yellow + ')</span>' +
       '<span><i class="dotc red"></i>Болно (' + counts.red + ')</span>' +
-      varietyLegend() +
-      '<span class="legend-br"></span>' +
-      '<span>' + beeIconSVG() + 'Педро</span>';
+      '<span class="ped">' + beeIconSVG() + 'Педро</span>' +
+      varietyLegend();
   }
 
   // Опциите на филтъра по сорт — с брой дървета, динамично спрямо фитъра по здраве
