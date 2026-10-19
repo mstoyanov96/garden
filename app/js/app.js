@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.99.7';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -3948,24 +3948,41 @@
   }
   // еднократно попълване: стари продажби (отпреди логването) да получат запис в дневника.
   // id е детерминистично (ev_sale_<id>), за да не се дублира при синхронизация между устройства.
+  function saleEventTs(s) {
+    if (s.createdAt) return s.createdAt;
+    // ако купувачът е добавен същия ден — продажбата е малко след него (за да е над „Нов купувач" в дневника)
+    var b = db.buyers.find(function (x) { return x.id === s.buyerId; });
+    if (b && b.createdAt && s.date) {
+      var d = new Date(b.createdAt);
+      var day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (day === s.date) return b.createdAt + 60000;
+    }
+    return s.date ? new Date(s.date + 'T12:00:00').getTime() : Date.now();
+  }
   function backfillSaleEvents() {
     if (!db.sales || !db.events) return false;
-    var have = {};
-    db.events.forEach(function (e) { if (e.type === 'sale_add' && e.saleId) have[e.saleId] = 1; });
-    var added = false;
+    var byId = {};
+    db.events.forEach(function (e) { if (e.type === 'sale_add' && e.saleId) byId[e.saleId] = e; });
+    var changed = false;
     db.sales.forEach(function (s) {
-      if (!s || !s.id || have[s.id]) return;
+      if (!s || !s.id) return;
+      var ts = saleEventTs(s);
+      var ex = byId[s.id];
+      if (ex) {
+        // коригирай реда само за авто-генерираните записи (не пипай ръчно създадените)
+        if (ex.id && ex.id.indexOf('ev_sale_') === 0 && ex.createdAt !== ts) { ex.createdAt = ts; changed = true; }
+        return;
+      }
       var bname = (db.buyers.find(function (x) { return x.id === s.buyerId; }) || {}).name || 'Купувач';
-      var ts = s.createdAt || (s.date ? new Date(s.date).getTime() : Date.now());
       db.events.unshift({
         id: 'ev_sale_' + s.id, type: 'sale_add', date: s.date, note: bname,
         kg: s.kg || 0, pricePerKg: s.pricePerKg || 0, total: s.total || 0, saleId: s.id,
         createdBy: s.createdBy || null, createdAt: ts, deletedAt: null, deletedBy: null
       });
-      added = true;
+      changed = true;
     });
-    if (added) DB.save(db);
-    return added;
+    if (changed) DB.save(db);
+    return changed;
   }
   function saveBuyer() {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
