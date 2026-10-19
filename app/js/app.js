@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.90.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.90.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -688,12 +688,15 @@
 
   // назад през историята (телефонен бутон „назад“ и iOS суайп правят същото чрез popstate)
   function goBack() {
+    if (isLightboxOpen()) { closeLightbox(); return; }
     if (isSheetOpen()) { closeSheet(); return; }
     if (history.length > 1) history.back(); else go('home');
   }
   function isSheetOpen() { var s = el('sheet'); return !!(s && s.classList.contains('open')); }
 
   window.addEventListener('popstate', function (e) {
+    // ако е отворена уголемена снимка (lightbox) — затвори нея и остани на същия изглед
+    if (isLightboxOpen()) { closeLightbox(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     // ако има отворен лист (sheet) — затвори него и остани на същия изглед
     if (isSheetOpen()) { closeSheet(); try { history.pushState({ route: route }, ''); } catch (err) {} return; }
     var st = e.state && e.state.route;
@@ -3015,10 +3018,11 @@
   }
 
   // Отваря снимка на цял екран със зуум с два пръста (жест), двойно докосване и влачене.
+  function isLightboxOpen() { var lb = document.getElementById('lightbox'); return !!(lb && lb.classList.contains('open')); }
+  function closeLightbox() { var lb = document.getElementById('lightbox'); if (lb) { lb.classList.remove('open'); lb.innerHTML = ''; } }
   function openLightbox(src) {
     var lb = document.getElementById('lightbox');
-    if (!lb) { lb = document.createElement('div'); lb.id = 'lightbox'; document.body.appendChild(lb); }
-    lb.innerHTML = '<button class="lb-close" aria-label="Затвори">✕</button>' +
+    if (!lb) { lb = document.createElement('div'); lb.id = 'lightbox'; document.body.appendChild(lb); }    lb.innerHTML = '<button class="lb-close" aria-label="Затвори">✕</button>' +
       '<div class="lb-hint">Разпери два пръста, за да уголемиш · двойно докосване · ✕ за затваряне</div>' +
       '<img class="lb-img" src="' + src + '" alt=""/>';
     lb.classList.add('open');
