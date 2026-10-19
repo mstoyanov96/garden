@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.95.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '1.96.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -42,6 +42,8 @@
   var pendingBucketVals = null; // временно новите тегла на кофите, докато админът избере дали да преизчисли старите записи
   var walk = { watchId: null, orient: null, heading: null, pos: null, nearestId: null }; // режим „Разходка“
   var editMode = false;     // редактиране на схемата (само админ)
+  var editingLmId = null;   // id на ориентира, който в момента се наглася (за подсветка)
+  var editingLmKind = null; // вид на наглася ориентир (за смяна на цвят)
   var pendingPhotoSrc = null; // избраната профилна снимка, докато се наглася вертикално
   var ppImgW = 0, ppImgH = 0; // размери на избраната снимка (за наместване: зуум + местене)
   var treeEditBefore = null; // снимка на дървото преди редактиране (за връщане при отказ/изтриване)
@@ -525,6 +527,18 @@
     nest: '<svg viewBox="0 0 24 24"><path d="M3 11c0 4 4 7 9 7s9-3 9-7Z" fill="#7a4a2f"/><ellipse cx="9.3" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/><ellipse cx="14.7" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/></svg>'
   };
   var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', stop: 'Спирка', nest: 'Гнездо' };
+  // стандартни цветове на значките (ползват се и за бутона „върни цвета")
+  var LM_DEFAULT_COLORS = { gate: '#cfe8d6', cistern: '#2e86de', stop: '#8ecbf2', nest: '#e4d2b2' };
+  function lmColor(kind) {
+    var c = db.settings && db.settings.landmarkColors && db.settings.landmarkColors[kind];
+    return c || LM_DEFAULT_COLORS[kind] || '#cfe8d6';
+  }
+  function setLandmarkColor(kind, color) {
+    if (!isAdmin() || !kind) return;
+    if (!db.settings.landmarkColors) db.settings.landmarkColors = {};
+    db.settings.landmarkColors[kind] = color;
+    save(); updateMap();
+  }
   // мащаб на иконките на ориентирите (админ-настройка, синхронизира се за всички)
   function lmScale() { var s = db.settings && db.settings.landmarkScale; return (typeof s === 'number' && s > 0) ? s : 1; }
   function setLmScale(val) {
@@ -546,9 +560,11 @@
     return list.map(function (m) {
       var act = edit ? ' data-action="editlm:' + m.id + '"' : '';
       var ed = edit ? ' editable' : '';
+      var hledit = (m.id === editingLmId) ? ' lm-editing' : '';
       var dx = m.dx || 0, dy = m.dy || 0;
-      return '<div class="lm badge ' + m.kind + ' lm-' + (m.anchor || 'c') + ed + '"' + act +
-        ' style="grid-row:' + m.gr + ';grid-column:' + m.gc + ' / span 2;--dx:' + dx + ';--dy:' + dy + '">' +
+      var col = (db.settings.landmarkColors && db.settings.landmarkColors[m.kind]) ? ';background:' + db.settings.landmarkColors[m.kind] : '';
+      return '<div class="lm badge ' + m.kind + ' lm-' + (m.anchor || 'c') + ed + hledit + '"' + act +
+        ' style="grid-row:' + m.gr + ';grid-column:' + m.gc + ' / span 2;--dx:' + dx + ';--dy:' + dy + col + '">' +
         (LM_ICONS[m.kind] || '') + '</div>';
     }).join('');
   }
@@ -2223,7 +2239,10 @@
     s.classList.add('open');
     if (peek && !wasPeek) { try { var mw = el('mapwrap'); if (mw) mw.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} }
   }
-  function closeSheet() { var s = el('sheet'); s.classList.remove('open'); s.classList.remove('peek'); s.innerHTML = ''; }
+  function closeSheet() {
+    var s = el('sheet'); s.classList.remove('open'); s.classList.remove('peek'); s.innerHTML = '';
+    if (editingLmId) { editingLmId = null; editingLmKind = null; updateMap(); }
+  }
 
   // ---- Сортове (само админ; промените се синхронизират за всички) ----
   var TREE_LABELS = [
@@ -2580,6 +2599,7 @@
     if (e.target && e.target.id === 'clBucket') updateCleanNet();
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
     if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark' || e.target.id === 'vBorder' || e.target.id === 'vLabel')) updateVarietyPreview();
+    if (e.target && e.target.id === 'lmColor' && editingLmKind) setLandmarkColor(editingLmKind, e.target.value);
   });
   // жив преглед на знака при писане на име (за „кръгче с буква")
   document.addEventListener('input', function (e) {
@@ -2702,6 +2722,7 @@
       case 'lmnudge': nudgeLandmark(parts[1], parts[2]); break;
       case 'lmjump': jumpLandmark(parts[1], parts[2]); break;
       case 'lmreset': resetLandmark(parts[1]); break;
+      case 'lmcolorreset': resetLandmarkColor(parts[1]); break;
       case 'togglelandmarks': setLandmarksVisible(!landmarksVisible()); render(); break;
       case 'lmscaleup': setLmScale(lmScale() + 0.1); break;
       case 'lmscaledown': setLmScale(lmScale() - 0.1); break;
@@ -2979,9 +3000,15 @@
   function sheetEditLandmark(id) {
     if (!isAdmin()) return;
     var m = lmById(id); if (!m) return;
+    editingLmId = id; editingLmKind = m.kind;
     var name = LM_LABELS[m.kind] || 'Ориентир';
     openSheet('<h3>' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span> ' : '') + esc(name) + '</h3>' +
-      '<p class="muted mb" style="font-size:13px">Намести ориентира точно където е на място. „Фино" мести по мъничко, „По-голяма стъпка" прескача цяла клетка.</p>' +
+      '<p class="muted mb" style="font-size:13px">Намести ориентира точно където е на място. Избраният ориентир мига на картата, за да го виждаш. „Фино" мести по мъничко, „По-голяма стъпка" прескача цяла клетка.</p>' +
+      '<div class="field"><label>🎨 Цвят на значката</label>' +
+      '<div class="row" style="align-items:center;gap:12px">' +
+      '<input id="lmColor" type="color" value="' + lmColor(m.kind) + '" style="width:54px;height:40px;border:none;background:none;padding:0;cursor:pointer"/>' +
+      '<button class="btn ghost sm" data-action="lmcolorreset:' + id + '">↺ Стандартен цвят</button>' +
+      '</div></div>' +
       '<div class="field"><label>Фино наместване</label><div class="move-pad">' +
       '<span class="sp"></span><button data-action="lmnudge:' + id + ':up">↑</button><span class="sp"></span>' +
       '<button data-action="lmnudge:' + id + ':left">←</button><span class="sp"></span><button data-action="lmnudge:' + id + ':right">→</button>' +
@@ -2994,6 +3021,25 @@
       '</div></div>' +
       '<button class="btn ghost mt" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>' +
       '<button class="btn mt" data-action="closesheet">Готово</button>', true);
+    updateMap();
+    scrollEditingLandmark();
+  }
+
+  // скролва нагласяния ориентир в горната видима част, за да не го крие менюто отдолу
+  function scrollEditingLandmark() {
+    try {
+      requestAnimationFrame(function () {
+        var list = db.settings.landmarks || [];
+        var m = list.filter(function (x) { return x.id === editingLmId; })[0];
+        if (!m) return;
+        var cells = document.querySelectorAll('.lm.lm-editing');
+        var elLm = cells[0];
+        if (!elLm) return;
+        var r = elLm.getBoundingClientRect();
+        var target = window.innerHeight * 0.22; // горна четвърт на екрана
+        window.scrollBy({ top: r.top - target, left: 0, behavior: 'smooth' });
+      });
+    } catch (e) {}
   }
 
   function nudgeLandmark(id, dir) {
@@ -3003,7 +3049,7 @@
     else if (dir === 'down') m.dy = (m.dy || 0) + step;
     else if (dir === 'left') m.dx = (m.dx || 0) - step;
     else if (dir === 'right') m.dx = (m.dx || 0) + step;
-    save(); updateMap(); sheetEditLandmark(id);
+    save(); updateMap(); scrollEditingLandmark();
   }
 
   function jumpLandmark(id, dir) {
@@ -3012,14 +3058,18 @@
     else if (dir === 'down') m.gr = m.gr + 1;
     else if (dir === 'left') m.gc = Math.max(2, m.gc - 2);
     else if (dir === 'right') m.gc = m.gc + 2;
-    save(); updateMap(); sheetEditLandmark(id);
+    save(); updateMap(); scrollEditingLandmark();
   }
 
   function resetLandmark(id) {
     var m = lmById(id); if (!m) return;
     var def = (DB.defaultLandmarks() || []).find(function (d) { return d.id === id; });
-    if (def) { m.gr = def.gr; m.gc = def.gc; m.dx = def.dx; m.dy = def.dy; m.anchor = def.anchor; save(); updateMap(); }
-    sheetEditLandmark(id);
+    if (def) { m.gr = def.gr; m.gc = def.gc; m.dx = def.dx; m.dy = def.dy; m.anchor = def.anchor; save(); updateMap(); scrollEditingLandmark(); }
+  }
+  function resetLandmarkColor(id) {
+    var m = lmById(id); if (!m || !isAdmin()) return;
+    if (db.settings.landmarkColors) { delete db.settings.landmarkColors[m.kind]; save(); updateMap(); }
+    var inp = el('lmColor'); if (inp) inp.value = LM_DEFAULT_COLORS[m.kind] || '#cfe8d6';
   }
 
   // ---- User management (owner) ------------------------------------------

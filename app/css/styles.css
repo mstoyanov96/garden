@@ -285,6 +285,8 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .grid .lm.lm-c{align-self:center;justify-self:center;}
 .grid .lm.lm-t{align-self:start;justify-self:center;}
 .grid .lm.editable{pointer-events:auto;cursor:pointer;outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
+.grid .lm.lm-editing{z-index:5;outline:2px solid #e4572e;outline-offset:1px;animation:lmpulse 1s ease-in-out infinite;}
+@keyframes lmpulse{0%,100%{box-shadow:0 0 0 0 rgba(228,87,46,.55);}50%{box-shadow:0 0 0 7px rgba(228,87,46,0);}}
 .lm-ico{display:inline-flex;width:22px;height:22px;vertical-align:middle;}
 .lm-ico svg{width:22px;height:22px;}
 
