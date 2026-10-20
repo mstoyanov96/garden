@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v192';              // ← увеличавай при нова версия
+var VERSION = 'v193';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
@@ -35,14 +35,32 @@ self.addEventListener('message', function (e) {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// получаване на push от сървъра (Cloudflare Worker) → системно известие,
+// дори когато приложението е напълно затворено
+self.addEventListener('push', function (e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; }
+  catch (err) { data = { title: 'Орехова градина', body: e.data ? e.data.text() : '' }; }
+  var title = data.title || 'Орехова градина';
+  var opts = {
+    body: data.body || '',
+    icon: data.icon || 'assets/icon.svg',
+    badge: 'assets/icon.svg',
+    tag: data.tag,
+    data: { url: data.url || './' }
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
 // натискане на известие → показва (или отваря) приложението
 self.addEventListener('notificationclick', function (e) {
   e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || './';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
     for (var i = 0; i < list.length; i++) {
       if ('focus' in list[i]) return list[i].focus();
     }
-    if (self.clients.openWindow) return self.clients.openWindow('./');
+    if (self.clients.openWindow) return self.clients.openWindow(url);
   }));
 });
 

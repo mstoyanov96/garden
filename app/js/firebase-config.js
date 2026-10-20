@@ -34,3 +34,18 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: '175982371885',
   appId: '1:175982371885:web:b0d5d1a5816766c98fc4a4'
 };
+
+/* =========================================================================
+   PUSH_CONFIG — push известия при затворено приложение (през Cloudflare Worker)
+   -------------------------------------------------------------------------
+   • publicKey — вече е попълнен (VAPID публичен ключ, не е таен).
+   • sendUrl   — адресът на твоя Cloudflare Worker. Попълни го, след като
+     деплойнеш worker-а (вж. tools/push-worker.js). Пример:
+        'https://orehi-push.<твое-име>.workers.dev'
+     Докато е празен, старите локални известия продължават да работят,
+     но push при затворено приложение няма да се праща.
+   ========================================================================= */
+window.PUSH_CONFIG = {
+  publicKey: 'BNX7CzPYZQjmm1pbxVH3FR1LYZjCbfXByPU6JFwCI4oBrZWfuyPkWSrcDa6n229COv1XVv89ZvzanEsydvwfpnA',
+  sendUrl: ''
+};

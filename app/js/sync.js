@@ -192,5 +192,25 @@
     }, 400);
   }
 
-  global.Sync = { init: init, push: push, isConfigured: function () { return cfgValid(global.FIREBASE_CONFIG); } };
+  // --- push абонаменти (отделна колекция, не влиза в обичайната синхронизация) ---
+  function savePushSub(id, data) {
+    if (!S.fs || !id) return Promise.resolve();
+    return S.fs.collection('pushSubs').doc(id).set(data);
+  }
+  function getPushSubs() {
+    if (!S.fs) return Promise.resolve([]);
+    return S.fs.collection('pushSubs').get().then(function (qs) {
+      var a = []; qs.forEach(function (d) { a.push(d.data()); }); return a;
+    });
+  }
+  function deletePushSub(id) {
+    if (!S.fs || !id) return Promise.resolve();
+    return S.fs.collection('pushSubs').doc(id).delete();
+  }
+
+  global.Sync = {
+    init: init, push: push,
+    isConfigured: function () { return cfgValid(global.FIREBASE_CONFIG); },
+    savePushSub: savePushSub, getPushSubs: getPushSubs, deletePushSub: deletePushSub
+  };
 })(window);

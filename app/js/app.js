@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.0.6';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.1.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -160,7 +160,11 @@
     updateAppBadge();
   }
   // извиква се щом знаем кой е влезлият потребител (вход/регистрация/зареждане)
-  function onUserReady() { initLogSeen(); primeSeenEvents(); updateAppBadge(); }
+  function onUserReady() {
+    initLogSeen(); primeSeenEvents(); updateAppBadge();
+    // ако известията вече са включени — подновяваме push абонамента (нов токен/ново устройство)
+    if (getNotifPref() && notifSupported() && Notification.permission === 'granted') subscribePush();
+  }
   // UI за секцията „Известия" в Настройки
   function notifSettingsHtml() {
     var u = me();
@@ -180,10 +184,10 @@
     var u = me();
     if (!u || !notifSupported()) return;
     var on = getNotifPref() && Notification.permission === 'granted';
-    if (on) { setNotifPref(false); render(); return; }
+    if (on) { setNotifPref(false); unsubscribePush(); render(); return; }
     // включване → искаме разрешение от системата (ако това устройство още няма)
     var apply = function (perm) {
-      if (perm === 'granted') { setNotifPref(true); showSysNotif('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); }
+      if (perm === 'granted') { setNotifPref(true); subscribePush(); showSysNotif('🔔 Известията са включени', { body: 'Ще те известяваме при нови записи в дневника.' }); }
       render();
     };
     if (Notification.permission === 'granted') { apply('granted'); return; }
@@ -192,6 +196,79 @@
       if (r && typeof r.then === 'function') r.then(apply);
     } catch (e) { render(); }
   }
+
+  // ---- Истински push (при затворено приложение) през Cloudflare Worker ----
+  function urlB64ToUint8Array(b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4);
+    var base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(base64), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  // постоянен идентификатор на устройството (ключ за документа в pushSubs)
+  function pushDeviceId() {
+    var k = 'walnut_push_dev';
+    try {
+      var v = localStorage.getItem(k);
+      if (!v) { v = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(k, v); }
+      return v;
+    } catch (e) { return 'dev_tmp'; }
+  }
+  function pushConfigured() {
+    var c = window.PUSH_CONFIG;
+    return !!(c && c.publicKey && c.sendUrl && window.Sync && Sync.savePushSub);
+  }
+  // Абонира това устройство за push и записва абонамента във Firestore.
+  function subscribePush() {
+    if (!pushConfigured()) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (existing) {
+        if (existing) return existing;
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8Array(window.PUSH_CONFIG.publicKey)
+        });
+      });
+    }).then(function (sub) {
+      if (!sub) return;
+      Sync.savePushSub(pushDeviceId(), {
+        id: pushDeviceId(),
+        userId: db.currentUserId || null,
+        sub: JSON.parse(JSON.stringify(sub)),
+        updatedAt: Date.now()
+      });
+    }).catch(function (e) { try { console.log('push subscribe err', e); } catch (x) {} });
+  }
+  // Маха абонамента на това устройство (при изключване на известията).
+  function unsubscribePush() {
+    if (!('serviceWorker' in navigator)) return;
+    try { if (window.Sync && Sync.deletePushSub) Sync.deletePushSub(pushDeviceId()); } catch (e) {}
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription();
+    }).then(function (sub) { if (sub) sub.unsubscribe(); }).catch(function () {});
+  }
+  // Праща push към всички ДРУГИ устройства при нов запис в дневника.
+  function sendPushForEvent(ev) {
+    if (!pushConfigured() || !ev || ev.deletedAt) return;
+    var m = LOG_TYPES[ev.type] || { ic: '📜', t: ev.type };
+    var t = ev.treeId ? tree(ev.treeId) : null;
+    var who = me();
+    var title = (m.ic || '📜') + ' ' + m.t + (t ? ' · ' + t.code : '');
+    var body = (who ? who.name : '') + (ev.note ? ' — ' + ev.note : '');
+    Sync.getPushSubs().then(function (list) {
+      var subs = (list || []).filter(function (s) {
+        return s && s.sub && s.userId !== db.currentUserId;
+      }).map(function (s) { return s.sub; });
+      if (!subs.length) return;
+      return fetch(window.PUSH_CONFIG.sendUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptions: subs, title: title, body: body, tag: ev.id, url: './' })
+      });
+    }).catch(function (e) { try { console.log('push send err', e); } catch (x) {} });
+  }
+
   function initials(name) { return (name || '?').trim().split(/\s+/).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
   // аватар: профилна снимка ако има, иначе инициали
   function avatarHtml(u, extraClass, attr) {
@@ -620,6 +697,7 @@
     db.events.unshift(ev);
     if (_seenEventIds) _seenEventIds[ev.id] = 1; // собствените записи не са „нови известия"
     save();
+    sendPushForEvent(ev); // push към останалите, дори при тяхно затворено приложение
   }
   function softDelete(evId) {
     var e = db.events.find(function (x) { return x.id === evId; });
