@@ -227,7 +227,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
    Orchard map
    ========================================================================= */
 .map-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:nowrap;}
-.map-toolbar select{flex:1 1 0;min-width:0;padding:0 6px;font-size:12px;text-overflow:ellipsis;}
+.map-toolbar select{flex:1 1 0;min-width:0;padding:0 6px;font-size:15px;text-overflow:ellipsis;}
 .map-toolbar #fVar{flex:1.15 1 0;}
 .map-toolbar #fHealth{flex:1 1 0;}
 .mapwrap{overflow:hidden;border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow);padding:12px 10px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
