@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v194';              // ← увеличавай при нова версия
+var VERSION = 'v195';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
@@ -35,6 +35,26 @@ self.addEventListener('message', function (e) {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// общ брояч за иконката (badge), споделен с приложението през IndexedDB.
+// delta = с колко да вдигнем; ако absolute != null — задава точна стойност.
+function badgeCount(delta, absolute) {
+  return new Promise(function (resolve) {
+    var open = indexedDB.open('walnut-badge', 1);
+    open.onupgradeneeded = function () { open.result.createObjectStore('kv'); };
+    open.onsuccess = function () {
+      var db = open.result, tx = db.transaction('kv', 'readwrite'), st = tx.objectStore('kv'), g = st.get('count');
+      g.onsuccess = function () {
+        var cur = g.result || 0;
+        var next = (absolute != null) ? absolute : Math.max(0, cur + (delta || 0));
+        st.put(next, 'count');
+        resolve(next);
+      };
+      g.onerror = function () { resolve(0); };
+    };
+    open.onerror = function () { resolve(0); };
+  });
+}
+
 // получаване на push от сървъра (Cloudflare Worker) → системно известие,
 // дори когато приложението е напълно затворено
 self.addEventListener('push', function (e) {
@@ -49,7 +69,12 @@ self.addEventListener('push', function (e) {
     tag: data.tag,
     data: { url: data.url || './' }
   };
-  e.waitUntil(self.registration.showNotification(title, opts));
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(title, opts),
+    badgeCount(1).then(function (n) {
+      if (self.navigator && self.navigator.setAppBadge) { try { self.navigator.setAppBadge(n); } catch (x) {} }
+    })
+  ]));
 });
 
 // натискане на известие → показва (или отваря) приложението

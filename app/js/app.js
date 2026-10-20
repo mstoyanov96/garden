@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.1.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.1.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -98,12 +98,27 @@
     return n;
   }
   function markLogOpened() { logViewSeen = getLogSeen(); setLogSeen(Date.now()); updateAppBadge(); }
+  // записва точната стойност в общия брояч (same-origin IndexedDB), за да е в синхрон
+  // с брояча, който service worker-ът вдига при push със затворено приложение
+  function writeBadgeCount(n) {
+    try {
+      var open = indexedDB.open('walnut-badge', 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore('kv'); };
+      open.onsuccess = function () {
+        try {
+          var db = open.result, tx = db.transaction('kv', 'readwrite');
+          tx.objectStore('kv').put(n, 'count');
+        } catch (e) {}
+      };
+    } catch (e) {}
+  }
   // иконата на инсталираното приложение (ако средата поддържа Badging API) показва брой непрочетени
   function updateAppBadge() {
     var n = unreadLogCount();
     try {
       if (navigator.setAppBadge) { if (n > 0) navigator.setAppBadge(n); else if (navigator.clearAppBadge) navigator.clearAppBadge(); }
     } catch (e) {}
+    writeBadgeCount(n);
   }
   function notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
   // Показва системно известие през service worker-а (единственият начин, който работи на
