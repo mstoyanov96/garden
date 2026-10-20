@@ -276,6 +276,9 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
   display:flex;align-items:flex-start;justify-content:flex-start;}
 .grid .area>span{font-size:10px;font-weight:800;padding:2px 6px;line-height:1.1;background:rgba(255,255,255,.7);border-bottom-right-radius:10px;}
 .grid .area.area-edit{pointer-events:auto;cursor:pointer;outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
+/* в режим редакция зоните и площите са НАД дърветата, за да може да се докоснат (иначе цъкаш дърво отдолу) */
+.grid .zone-edit,.grid .area.area-edit{z-index:8;pointer-events:auto;cursor:pointer;}
+.grid .zone-edit{outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
 
 /* ориентири на картата (порти, цистерна, спирка, гнездо) */
 .grid .lm{position:relative;z-index:3;pointer-events:none;display:flex;align-items:center;justify-content:center;

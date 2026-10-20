@@ -44,7 +44,7 @@
   // anchor=как се закотвя в клетката: tl,r,re,b,c,t
   function defaultLandmarks() {
     return [
-      { id: 'lm_gate_top', kind: 'gate', anchor: 'tl', gr: 2, gc: 4, dx: -7, dy: -14 },
+      { id: 'lm_gate_top', kind: 'gate', anchor: 'tl', gr: 2, gc: 4, dx: -7, dy: -14, dir: 'up' },
       { id: 'lm_cistern', kind: 'cistern', anchor: 'b', gr: 2, gc: 5, dx: 7, dy: -3 },
       { id: 'lm_gate_a', kind: 'gate', anchor: 'r', gr: 2, gc: 18, dx: 14, dy: 0 },
       { id: 'lm_gate_b', kind: 'gate', anchor: 'r', gr: 3, gc: 18, dx: 14, dy: 0 },
@@ -54,6 +54,14 @@
       { id: 'lm_stop', kind: 'stop', anchor: 'c', gr: 11, gc: 13, dx: 0, dy: 17 },
       { id: 'lm_nest', kind: 'nest', anchor: 't', gr: 9, gc: 15, dx: 2, dy: -11 }
     ];
+  }
+
+  // Стрелката на горната лява порта (до А1) да сочи нагоре (стара структура няма dir).
+  function fixGateArrow(db) {
+    if (!db || !db.settings || !db.settings.landmarks) return false;
+    var g = db.settings.landmarks.filter(function (m) { return m.id === 'lm_gate_top'; })[0];
+    if (g && g.dir == null) { g.dir = 'up'; return true; }
+    return false;
   }
 
   // ---- Seed ---------------------------------------------------------------
@@ -159,7 +167,8 @@
     if (db.settings && db.settings.zones) { var cp = db.settings.zones.filter(function (z) { return z.kind === 'coop' && z.label === 'Кокошки'; }); if (cp.length) { cp.forEach(function (z) { z.label = 'Кошита'; }); save(db); } }
     if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
     if (db.settings && !db.settings.landmarks) { db.settings.landmarks = defaultLandmarks(); save(db); }
-    if (db.settings && !db.settings.areas) { db.settings.areas = []; save(db); }
+    if (db.settings && db.settings.areas == null) { db.settings.areas = []; save(db); }
+    if (fixGateArrow(db)) save(db);
     if (!db.photos) { db.photos = []; save(db); }
     return db;
   }
@@ -203,6 +212,7 @@
     seed: seed,
     defaultZones: defaultZones,
     defaultLandmarks: defaultLandmarks,
+    fixGateArrow: fixGateArrow,
     migratePhotos: migratePhotos
   };
 })(window);
