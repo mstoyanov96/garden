@@ -47,5 +47,5 @@ window.FIREBASE_CONFIG = {
    ========================================================================= */
 window.PUSH_CONFIG = {
   publicKey: 'BNX7CzPYZQjmm1pbxVH3FR1LYZjCbfXByPU6JFwCI4oBrZWfuyPkWSrcDa6n229COv1XVv89ZvzanEsydvwfpnA',
-  sendUrl: ''
+  sendUrl: 'https://orehite-push.m-stoyanov96.workers.dev/'
 };
