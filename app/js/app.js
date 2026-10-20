@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.1.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.2.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -82,6 +82,37 @@
   function me() { return db.users.find(function (u) { return u.id === db.currentUserId; }) || null; }
   function isAdmin() { var m = me(); return m && m.role === 'admin'; }
   function isOwner() { var m = me(); return m && (m.isOwner || m.id === db.ownerId); }
+
+  // ---- Активност на потребителите (последно онлайн + брой отваряния) ------
+  // Пази се върху самия потребител (в users), затова се синхронизира за всички
+  // и админите могат да го виждат в „Потребители и роли".
+  function recordOpen() {
+    var u = me(); if (!u) return;
+    var now = Date.now();
+    u.lastOnline = now;
+    if (!Array.isArray(u.opens)) u.opens = [];
+    var last = u.opens.length ? u.opens[u.opens.length - 1] : 0;
+    if (now - last > 30 * 60 * 1000) u.opens.push(now); // ново отваряне (поне 30 мин пауза)
+    var cut = now - 120 * 86400000;                     // пази историята до ~4 месеца
+    u.opens = u.opens.filter(function (t) { return t >= cut; });
+    save();
+  }
+  function startOfTodayMs() { var d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function countOpens(u, sinceMs) {
+    if (!u || !Array.isArray(u.opens)) return 0;
+    return u.opens.filter(function (t) { return t >= sinceMs; }).length;
+  }
+  function fmtLastOnline(ts) {
+    if (!ts) return 'никога';
+    var diff = Date.now() - ts;
+    if (diff < 60000) return 'току-що';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' мин. преди';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч. преди';
+    var d = new Date(ts);
+    var mo = ['ян', 'фев', 'март', 'апр', 'май', 'юни', 'юли', 'авг', 'сеп', 'окт', 'ное', 'дек'];
+    var hh = ('0' + d.getHours()).slice(-2), mm = ('0' + d.getMinutes()).slice(-2);
+    return d.getDate() + ' ' + mo[d.getMonth()] + ' ' + d.getFullYear() + ', ' + hh + ':' + mm;
+  }
 
   // ---- Известия / непрочетени записи в дневника --------------------------
   // „Последно видяно" се пази локално на устройството, отделно за всеки потребител.
@@ -177,6 +208,7 @@
   // извиква се щом знаем кой е влезлият потребител (вход/регистрация/зареждане)
   function onUserReady() {
     initLogSeen(); primeSeenEvents(); updateAppBadge();
+    recordOpen();
     // ако известията вече са включени — подновяваме push абонамента (нов токен/ново устройство)
     if (getNotifPref() && notifSupported() && Notification.permission === 'granted') subscribePush();
   }
@@ -2225,7 +2257,13 @@
         return '<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)">' +
           avatarHtml(u, 'sm') +
           '<div style="flex:1"><b>' + esc(u.name) + '</b>' + (owner ? ' 👑' : '') +
-          '<div class="muted" style="font-size:12px">' + (u.role === 'admin' ? '🔒 Администратор' : 'Работник') + '</div></div>' +
+          '<div class="muted" style="font-size:12px">' + (u.role === 'admin' ? '🔒 Администратор' : 'Работник') + '</div>' +
+          (isAdmin() ? '<div class="muted" style="font-size:11px;margin-top:3px;line-height:1.6">' +
+            '🕒 Последно онлайн: <b>' + fmtLastOnline(u.lastOnline) + '</b><br>' +
+            '📱 Отваряния: днес <b>' + countOpens(u, startOfTodayMs()) + '</b>' +
+            ' · седмица <b>' + countOpens(u, Date.now() - 7 * 86400000) + '</b>' +
+            ' · месец <b>' + countOpens(u, Date.now() - 30 * 86400000) + '</b></div>' : '') +
+          '</div>' +
           '<span class="badge ' + (u.role === 'admin' ? 'green' : 'orange') + '">' + (u.role === 'admin' ? 'Админ' : 'Работник') + '</span></div>' +
           (controls ? '<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 0 12px;border-bottom:1px solid var(--line)">' + controls + '</div>' : '');
       }).join('') + '</div>' +
@@ -4331,6 +4369,10 @@
     } catch (err) {}
   }
   if (db.currentUserId) onUserReady();
+  // при връщане към приложението отбелязваме ново „отваряне" (за статистиката на админа)
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') recordOpen();
+  });
   try { history.replaceState({ route: route }, ''); } catch (err) {}
   applyZoom();
   backfillSaleEvents();
