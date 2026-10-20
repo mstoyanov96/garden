@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.0.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.0.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -560,7 +560,7 @@
 
   // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
   var LM_ICONS = {
-    gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
+    gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="5" y="4.4" width="14" height="2.2" rx="1"/><rect x="5" y="17.4" width="14" height="2.2" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
     gateUp: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.2 V8.7"/><path d="M9.3 11.6 L12 8.7 L14.7 11.6"/></g></svg>',
     cistern: '<svg viewBox="0 0 24 24"><path d="M12 3C12 3 5 11 5 15a7 7 0 0 0 14 0C19 11 12 3 12 3Z" fill="#fff"/></svg>',
     stop: '<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="9" rx="2.2" fill="#fff"/><g fill="#f3b53c"><rect x="5" y="8.3" width="3" height="3" rx="0.6"/><rect x="9" y="8.3" width="3" height="3" rx="0.6"/><rect x="13" y="8.3" width="3" height="3" rx="0.6"/><rect x="17" y="8.3" width="2" height="3" rx="0.6"/></g><circle cx="7.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="7.5" cy="16.3" r="0.8" fill="#f3b53c"/><circle cx="16.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="16.5" cy="16.3" r="0.8" fill="#f3b53c"/></svg>',
