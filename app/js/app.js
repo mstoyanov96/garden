@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.99.7';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.0.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -58,6 +58,16 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
   // пази само цифри и водещия „+“ за tel: връзка
   function telHref(s) { s = String(s == null ? '' : s).replace(/[^\d+]/g, ''); return s.replace(/(?!^)\+/g, ''); }
+  // „#rrggbb“ + прозрачност (0–1) → „rgba(r,g,b,a)“ за полупрозрачните площи
+  function hexToRgba(hex, alpha) {
+    var h = String(hex || '#8a5a2b').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var r = parseInt(h.substring(0, 2), 16) || 0;
+    var g = parseInt(h.substring(2, 4), 16) || 0;
+    var b = parseInt(h.substring(4, 6), 16) || 0;
+    var a = Math.max(0, Math.min(1, alpha == null ? 1 : alpha));
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
   // форматира телефон с разстояния за четливост (набирането минава през telHref)
   function fmtPhone(s) {
     if (s == null) return '';
@@ -981,6 +991,12 @@
     }
     return false;
   }
+  // Стара структура от облака може да е без площи → гарантираме масива, за да не гръмне кодът.
+  function ensureAreas() {
+    if (!db.settings) return false;
+    if (!db.settings.areas) { db.settings.areas = []; return true; }
+    return false;
+  }
   // Облакът вече има данни → приемаме тях (пазим кой е влязъл на този телефон).
   function applyCloudSnapshot(cloud) {
     var keepUser = db.currentUserId;
@@ -997,10 +1013,11 @@
     if (addedSales) { changed = true; if (window.Sync) window.Sync.push(); }
     var fixed = normalizeZones();
     var fixedLm = ensureLandmarks();
+    var fixedAr = ensureAreas();
     DB.migratePhotos(db);
     DB.save(db);
-    if ((fixed || fixedLm) && window.Sync) window.Sync.push();
-    if (changed || fixed || fixedLm) render();
+    if ((fixed || fixedLm || fixedAr) && window.Sync) window.Sync.push();
+    if (changed || fixed || fixedLm || fixedAr) render();
     primeSeenEvents();   // след първоначалното зареждане приемаме всичко за видяно
     updateAppBadge();
   }
@@ -1014,7 +1031,7 @@
     window.Sync.init({
       getLocalDb: function () { return db; },
       onInitialLoad: applyCloudSnapshot,
-      onRemote: function () { var fixed = normalizeZones(); var fixedLm = ensureLandmarks(); var addedSales = backfillSaleEvents(); DB.migratePhotos(db); DB.save(db); if ((fixed || fixedLm || addedSales) && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
+      onRemote: function () { var fixed = normalizeZones(); var fixedLm = ensureLandmarks(); var fixedAr = ensureAreas(); var addedSales = backfillSaleEvents(); DB.migratePhotos(db); DB.save(db); if ((fixed || fixedLm || fixedAr || addedSales) && window.Sync) window.Sync.push(); onRemoteEvents(); if (!isSheetOpen()) render(); },
       setStatus: setSyncStatus
     });
   }
@@ -1153,8 +1170,8 @@
       '</div>' +
       (editMode ? '' : '<div class="seg"><button class="' + (mapMode === 'health' ? 'active' : '') + '" data-action="mapmode:health">🌳 Здраве</button>' +
         '<button class="' + (mapMode === 'harvest' ? 'active' : '') + '" data-action="mapmode:harvest">🧺 Събиране</button></div>') +
-      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, или ориентир (порта, цистерна, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
-      (editMode ? '<button class="btn secondary mb" data-action="addzone">➕ Добави зона</button>' : '') +
+      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, площ (цветно поле) за да я наместиш, или ориентир (порта, цистерна, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
+      (editMode ? '<div class="row mb"><button class="btn secondary" data-action="addzone">➕ Добави зона</button><button class="btn secondary" data-action="addarea">🟫 Добави площ</button></div>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar">' + varietyOptions('', '') + '</select>' +
         (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
@@ -1180,6 +1197,11 @@
     // разшири колоните, ако зона стърчи надясно
     (db.settings.zones || []).forEach(function (z) {
       var need = Math.ceil((z.c + z.cs - 2) / 2);
+      if (need > maxCol) maxCol = need;
+    });
+    // разшири колоните, ако площ стърчи надясно
+    (db.settings.areas || []).forEach(function (a) {
+      var need = Math.ceil((a.c + a.cs - 2) / 2);
       if (need > maxCol) maxCol = need;
     });
 
@@ -1209,6 +1231,17 @@
     var html = '<div class="grid" style="grid-template-columns:16px repeat(' + cols2 + ',1fr);--lm-scale:' + lmScale() + '">';
     html += '<div class="corner" style="grid-row:1;grid-column:1"></div>';
     for (var c = 1; c <= maxCol; c++) html += '<div class="colhead" style="grid-row:1;grid-column:' + (2 * c) + ' / span 2">' + (c - 1) + '</div>';
+    // прозрачни цветни площи (под дърветата) — админът ги чертае/оразмерява в режим редакция
+    (db.settings.areas || []).forEach(function (a) {
+      var act = edit ? ' data-action="editarea:' + a.id + '"' : '';
+      var cls = 'area' + (edit ? ' area-edit' : '');
+      var col = a.color || '#8a5a2b';
+      var op = (a.opacity == null ? 15 : a.opacity) / 100;
+      html += '<div class="' + cls + '"' + act +
+        ' style="grid-row:' + a.r + ' / span ' + a.rs + ';grid-column:' + a.c + ' / span ' + a.cs +
+        ';background:' + hexToRgba(col, op) + ';border-color:' + hexToRgba(col, Math.min(1, op + 0.25)) + '">' +
+        (a.label ? '<span style="color:' + col + '">' + esc(a.label) + '</span>' : '') + '</div>';
+    });
     // декоративни зони (Градина, Къща, Кокошки, Джаро) — местят се/оразмеряват в режим редакция
     zones.forEach(function (z) {
       var act = edit ? ' data-action="editzone:' + z.id + '"' : '';
@@ -2670,10 +2703,13 @@
     if (e.target && e.target.id === 'homePeriod') setStatPeriod(e.target.value);
     if (e.target && (e.target.id === 'vShape' || e.target.id === 'vMark' || e.target.id === 'vBorder' || e.target.id === 'vLabel')) updateVarietyPreview();
     if (e.target && e.target.id === 'lmColor' && editingLmKind) setLandmarkColor(editingLmKind, e.target.value);
+    if (e.target && e.target.id === 'arColor') setAreaColor(e.target.getAttribute('data-area'), e.target.value);
   });
   // жив преглед на знака при писане на име (за „кръгче с буква")
   document.addEventListener('input', function (e) {
     if (e.target && e.target.id === 'vName' && el('vMark') && el('vMark').value === 'letter') updateVarietyPreview();
+    if (e.target && e.target.id === 'arColor') setAreaColor(e.target.getAttribute('data-area'), e.target.value);
+    if (e.target && e.target.id === 'arOpacity') setAreaOpacity(e.target.getAttribute('data-area'), e.target.value);
   });
 
   // жив преглед при наместване на профилната снимка (зуум + местене наляво/надясно/горе/долу)
@@ -2788,6 +2824,13 @@
       case 'renamezone': renameZone(parts[1]); break;
       case 'addzone': addZone(); break;
       case 'delzone': deleteZone(parts[1]); break;
+
+      case 'editarea': sheetEditArea(parts[1]); break;
+      case 'movearea': moveArea(parts[1], parts[2]); break;
+      case 'sizearea': sizeArea(parts[1], parts[2]); break;
+      case 'renamearea': renameArea(parts[1]); break;
+      case 'addarea': addArea(); break;
+      case 'delarea': deleteArea(parts[1]); break;
 
       case 'editlm': sheetEditLandmark(parts[1]); break;
       case 'lmnudge': nudgeLandmark(parts[1], parts[2]); break;
@@ -3048,6 +3091,92 @@
     var z = zoneById(id); if (!z) return;
     if (!confirm('Да изтрия ли зоната „' + z.label + '“?')) return;
     db.settings.zones = db.settings.zones.filter(function (x) { return x.id !== id; });
+    save(); closeSheet(); render();
+  }
+
+  // ---- Прозрачни площи (admin) ------------------------------------------
+  function areaById(id) { return (db.settings.areas || []).find(function (a) { return a.id === id; }); }
+
+  function sheetEditArea(id) {
+    if (!isAdmin()) return;
+    var a = areaById(id); if (!a) return;
+    var op = (a.opacity == null ? 15 : a.opacity);
+    openSheet('<h3>🟫 ' + esc(a.label || 'Площ') + '</h3>' +
+      '<div class="field"><label>Име (по желание)</label><div class="row"><input id="arName" class="input" value="' + esc(a.label || '') + '" placeholder="напр. Педрота" />' +
+      '<button class="btn sm" data-action="renamearea:' + id + '">Запази</button></div></div>' +
+      '<div class="field"><label>Цвят</label><div class="row">' +
+      '<input id="arColor" type="color" value="' + esc(a.color || '#8a5a2b') + '" data-area="' + id + '" style="width:54px;height:40px;padding:2px;border-radius:8px" />' +
+      '<span class="muted" style="font-size:13px">Избери какъвто цвят искаш</span></div></div>' +
+      '<div class="field"><label>Прозрачност: <b id="arOpVal">' + op + '%</b></label>' +
+      '<input id="arOpacity" type="range" min="4" max="60" step="1" value="' + op + '" data-area="' + id + '" style="width:100%" />' +
+      '<p class="muted" style="font-size:12px;margin:4px 0 0">По-ниско = по-прозрачно (едва се вижда), по-високо = по-наситено.</p></div>' +
+      '<div class="field"><label>Премести</label><div class="move-pad">' +
+      '<span class="sp"></span><button data-action="movearea:' + id + ':up">↑</button><span class="sp"></span>' +
+      '<button data-action="movearea:' + id + ':left">←</button><span class="sp"></span><button data-action="movearea:' + id + ':right">→</button>' +
+      '<span class="sp"></span><button data-action="movearea:' + id + ':down">↓</button><span class="sp"></span>' +
+      '</div></div>' +
+      '<div class="field"><label>Ширина</label><div class="row">' +
+      '<button class="btn secondary" data-action="sizearea:' + id + ':wminus">− по-тясно</button>' +
+      '<button class="btn secondary" data-action="sizearea:' + id + ':wplus">по-широко +</button></div></div>' +
+      '<div class="field"><label>Височина</label><div class="row">' +
+      '<button class="btn secondary" data-action="sizearea:' + id + ':hminus">− по-ниско</button>' +
+      '<button class="btn secondary" data-action="sizearea:' + id + ':hplus">по-високо +</button></div></div>' +
+      '<button class="btn danger mt" data-action="delarea:' + id + '">🗑️ Изтрий площта</button>' +
+      '<button class="btn ghost mt" data-action="closesheet">Готово</button>', true);
+  }
+
+  function moveArea(id, dir) {
+    var a = areaById(id); if (!a) return;
+    var maxR = 1 + orchardRowCount();
+    if (dir === 'up') a.r = Math.max(2, a.r - 1);
+    else if (dir === 'down') a.r = Math.min(maxR, a.r + 1);
+    else if (dir === 'left') a.c = Math.max(2, a.c - 1);
+    else if (dir === 'right') a.c = Math.min(40, a.c + 1);
+    save(); updateMap(); sheetEditArea(id);
+  }
+
+  function sizeArea(id, how) {
+    var a = areaById(id); if (!a) return;
+    if (how === 'wplus') a.cs = Math.min(40, a.cs + 1);
+    else if (how === 'wminus') a.cs = Math.max(1, a.cs - 1);
+    else if (how === 'hplus') a.rs = Math.min(orchardRowCount(), a.rs + 1);
+    else if (how === 'hminus') a.rs = Math.max(1, a.rs - 1);
+    save(); updateMap(); sheetEditArea(id);
+  }
+
+  function renameArea(id) {
+    var a = areaById(id); if (!a) return;
+    a.label = el('arName') ? el('arName').value.trim() : '';
+    save(); updateMap(); sheetEditArea(id);
+  }
+
+  function setAreaColor(id, color) {
+    var a = areaById(id); if (!a || !color) return;
+    a.color = color;
+    save(); updateMap();
+  }
+
+  function setAreaOpacity(id, val) {
+    var a = areaById(id); if (!a) return;
+    var v = parseInt(val, 10); if (!isFinite(v)) return;
+    a.opacity = Math.max(4, Math.min(60, v));
+    if (el('arOpVal')) el('arOpVal').textContent = a.opacity + '%';
+    save(); updateMap();
+  }
+
+  function addArea() {
+    if (!isAdmin()) return;
+    db.settings.areas = db.settings.areas || [];
+    var na = { id: DB.uid('area'), label: '', color: '#8a5a2b', opacity: 15, r: 2, rs: 2, c: 8, cs: 4 };
+    db.settings.areas.push(na);
+    save(); render(); sheetEditArea(na.id);
+  }
+
+  function deleteArea(id) {
+    if (!isAdmin()) return;
+    var a = areaById(id); if (!a) return;
+    if (!confirm('Да изтрия ли тази площ' + (a.label ? ' „' + a.label + '“' : '') + '?')) return;
+    db.settings.areas = db.settings.areas.filter(function (x) { return x.id !== id; });
     save(); closeSheet(); render();
   }
 

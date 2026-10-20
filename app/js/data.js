@@ -131,6 +131,7 @@
         yieldOutputKg: 4.8,   // изход (чиста ядка)
         shellYield: 0.5,      // колко обелени кофи излизат от 1 зелена кофа
         zones: defaultZones(),
+        areas: [],            // прозрачни цветни площи, които админ чертае върху картата
         landmarks: defaultLandmarks()
       },
       users: users,
@@ -158,6 +159,7 @@
     if (db.settings && db.settings.zones) { var cp = db.settings.zones.filter(function (z) { return z.kind === 'coop' && z.label === 'Кокошки'; }); if (cp.length) { cp.forEach(function (z) { z.label = 'Кошита'; }); save(db); } }
     if (db.settings && db.settings.shellYield == null) { db.settings.shellYield = 0.5; save(db); }
     if (db.settings && !db.settings.landmarks) { db.settings.landmarks = defaultLandmarks(); save(db); }
+    if (db.settings && !db.settings.areas) { db.settings.areas = []; save(db); }
     if (!db.photos) { db.photos = []; save(db); }
     return db;
   }
