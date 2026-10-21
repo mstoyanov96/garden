@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.2.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.2.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1643,7 +1643,7 @@
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       var inAvg = !e.excludeAvg;
       return '<div class="list-row"' + (inAvg ? '' : ' style="opacity:.55"') + '>' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели' + (inAvg ? '' : ' · извън средното') + '</small></div>' +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели · без кофата' + (inAvg ? '' : ' · извън средното') + '</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="sortavg:' + e.id + '">' + (inAvg ? '✅ в средното' : '➕ в средното') + '</button>' : '') +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
@@ -4085,7 +4085,7 @@
       var tot = (e.whiteKg || 0) + (e.blackKg || 0);
       var wp = tot > 0 ? Math.round((e.whiteKg || 0) / tot * 100) : 0;
       return '<div class="list-row">' + avatarHtml(who, 'lg') +
-        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели</small></div>' +
+        '<div class="tx"><b class="sortkv">⚪ ' + fmtKg(e.whiteKg || 0) + ' кг<br>⚫ ' + fmtKg(e.blackKg || 0) + ' кг</b><small>' + wp + '% бели · без кофата</small></div>' +
         '<div class="meta"><span class="dt">' + fmtDate(e.date) + '</span>' +
         (isAdmin() ? '<div><button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button></div>' : '') +
         '</div></div>';

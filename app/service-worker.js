@@ -1,5 +1,5 @@
 /* service-worker.js — офлайн кеш + лесно обновяване (network-first) */
-var VERSION = 'v197';              // ← увеличавай при нова версия
+var VERSION = 'v198';              // ← увеличавай при нова версия
 var CACHE = 'walnut-' + VERSION;
 var ASSETS = [
   './',
