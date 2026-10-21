@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.3.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.3.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -2835,8 +2835,8 @@
       '<div class="mapbar-actions">' +
       (n ? '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
         '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' +
-        (isAdmin() ? '<button class="btn sm secondary" data-action="mapbulkedit">✏️ Редактирай</button>' : '') : '') +
-      '<button class="btn sm ghost" data-action="mapclear">Готово</button>' +
+        (isAdmin() ? '<button class="btn sm secondary" data-action="mapbulkedit" aria-label="Редактирай">✏️</button>' : '') : '') +
+      '<button class="btn sm ghost" data-action="mapclear" aria-label="Готово">✓</button>' +
       '</div>';
     bar.classList.add('open');
   }
