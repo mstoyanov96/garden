@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.4.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.4.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1905,16 +1905,26 @@
     var reactBtn = '<button class="heartbtn' + (liked ? ' on' : '') + '" data-action="react:' + e.id + '" aria-label="Реагирай със сърце">' +
       (liked ? '❤️' : '🤍') + (reacts.length ? ' <span class="hc">' + reacts.length + '</span>' : '') + '</button>';
     var fresh = !deleted && (e.createdAt || 0) > logViewSeen && e.createdBy !== db.currentUserId;
+    var buyerRestorable = e.type === 'buyer_del' && e.buyerId && (db.buyers.find(function (x) { return x.id === e.buyerId; }) || {}).deletedAt;
+    var adminBtns = '';
+    if (isAdmin()) {
+      if (deleted) {
+        adminBtns = '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
+          '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="purge:' + e.id + '">🗑️ Завинаги</button>';
+      } else if (buyerRestorable) {
+        adminBtns = '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restorebuyer:' + e.buyerId + '">↩️ Върни купувача</button>';
+      } else {
+        adminBtns = (EDITABLE_TYPES[e.type] ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button>' : '') +
+          '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>';
+      }
+      adminBtns = '<div>' + adminBtns + '</div>';
+    }
     return '<div class="list-row' + (fresh ? ' unread' : '') + '"' + (deleted ? ' style="opacity:.5"' : '') + '>' +
       avatarHtml(who, 'lg') +
       '<div class="tx"><b>' + m.ic + ' ' + m.t + scopeLbl + (deleted ? ' <span class="badge orange">изтрито</span>' : '') + '</b>' +
       '<small>' + detail + onBehalf + '</small>' +
       '<div class="reacts">' + reactBtn + '</div></div>' +
-      '<div class="meta">' + fmtDate(e.date) +
-      (isAdmin() ? '<div>' + (deleted ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="restore:' + e.id + '">Върни</button>' +
-        '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="purge:' + e.id + '">🗑️ Завинаги</button>'
-        : (EDITABLE_TYPES[e.type] ? '<button class="btn sm ghost" style="margin-top:6px;height:30px" data-action="edit:' + e.id + '">✏️</button>' : '') +
-        '<button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="del:' + e.id + '">Изтрий</button>') + '</div>' : '') +
+      '<div class="meta">' + fmtDate(e.date) + adminBtns +
       '</div></div>';
   }
 
@@ -2125,7 +2135,7 @@
   //  SALES + BUYERS
   // =======================================================================
   function viewSales() {
-    var buyers = db.buyers.map(function (b) {
+    var buyers = db.buyers.filter(function (b) { return !b.deletedAt; }).map(function (b) {
       var purchases = activeSales().filter(function (s) { return s.buyerId === b.id; });
       var kg = purchases.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
       var spent = purchases.reduce(function (s, x) { return s + (x.total || 0); }, 0);
@@ -2161,10 +2171,12 @@
       '<div class="card">' + (purchases.length ? purchases.map(function (s) {
         return '<div class="list-row"><div class="ic harvest">💰</div><div class="tx"><b>' + s.kg + ' кг · ' + (s.total || 0).toFixed(2) + ' €</b>' +
           '<small>' + (s.pricePerKg || 0) + ' €/кг' + (s.note ? ' · ' + esc(s.note) : '') + '</small></div>' +
-          '<div class="meta">' + fmtDate(s.date) + '</div></div>';
+          '<div class="meta">' + fmtDate(s.date) +
+          '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="delsale:' + s.id + '">🗑️ Изтрий</button></div>' +
+          '</div></div>';
       }).join('') : '<p class="muted">Още няма покупки.</p>') + '</div>' +
       '<button class="btn" data-action="newsalefor:' + b.id + '">➕ Добави продажба</button>' +
-      (isAdmin() ? '<button class="btn danger mt" data-action="delbuyer:' + b.id + '">🗑️ Изтрий купувача</button>' : '') +
+      '<button class="btn danger mt" data-action="delbuyer:' + b.id + '">🗑️ Изтрий купувача</button>' +
       '</div>';
   }
 
@@ -2651,13 +2663,14 @@
   var _saleDraft = null; // пази попълнената продажба, докато се създава нов купувач
   function sheetNewSale(buyerId, draft) {
     draft = draft || {};
-    var noBuyers = db.buyers.length === 0;
+    var liveBuyers = db.buyers.filter(function (b) { return !b.deletedAt; });
+    var noBuyers = liveBuyers.length === 0;
     openSheet('<h3>Нова продажба</h3>' +
       '<div class="field"><label>Купувач</label>' +
       (noBuyers
         ? '<p class="muted" style="font-size:13px;margin:0 0 8px">Още няма купувачи. Натисни бутона долу, за да създадеш нов.</p>'
         : '<select id="saleBuyer" class="input">' +
-          db.buyers.map(function (b) { return '<option value="' + b.id + '"' + (b.id === buyerId ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>') +
+          liveBuyers.map(function (b) { return '<option value="' + b.id + '"' + (b.id === buyerId ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>') +
       '</div>' +
       '<button class="btn ghost" style="margin:-4px 0 12px" data-action="newbuyerinsale">➕ Нов купувач</button>' +
       '<div class="field"><label>Дата</label><input id="saleDate" type="date" class="input" value="' + (draft.date || DB.todayISO()) + '"/></div>' +
@@ -2693,7 +2706,7 @@
       '<div class="field"><label>Телефон</label><input id="bPhone" class="input" value="' + esc(b.phone || '') + '"/></div>' +
       '<div class="field"><label>Бележка</label><textarea id="bNote" class="input">' + esc(b.note || '') + '</textarea></div>' +
       '<button class="btn" data-action="saveeditbuyer:' + id + '">💾 Запази</button>' +
-      (isAdmin() ? '<button class="btn danger mt" data-action="delbuyer:' + id + '">🗑️ Изтрий купувача</button>' : '') +
+      '<button class="btn danger mt" data-action="delbuyer:' + id + '">🗑️ Изтрий купувача</button>' +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
 
@@ -3144,6 +3157,8 @@
       case 'editbuyer': sheetEditBuyer(parts[1]); break;
       case 'saveeditbuyer': saveEditBuyer(parts[1]); break;
       case 'delbuyer': deleteBuyer(parts[1]); break;
+      case 'restorebuyer': restoreBuyer(parts[1]); break;
+      case 'delsale': deleteSale(parts[1]); break;
       case 'buyer': go('buyer', parts[1]); break;
 
       case 'savebuckets': saveBuckets(); break;
@@ -4378,16 +4393,33 @@
   }
 
   function deleteBuyer(id) {
+    var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
+    if (b.deletedAt) return;
+    if (!confirm('Да изтрия ли купувача „' + b.name + '"? Админ може да го върне от дневника.')) return;
+    b.deletedAt = Date.now();
+    b.deletedBy = db.currentUserId;
+    addEvent({ type: 'buyer_del', date: DB.todayISO(), note: b.name, buyerId: id });
+    closeSheet(); go('sales');
+  }
+  // връщане на изтрит купувач (само админ, от дневника)
+  function restoreBuyer(id) {
     if (!isAdmin()) return;
     var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
-    if (db.sales.some(function (s) { return s.buyerId === id && !s.deletedAt; })) {
-      alert('Този купувач има записани продажби и не може да се изтрие.');
-      return;
-    }
-    if (!confirm('Да изтрия ли купувача „' + b.name + '"?')) return;
-    db.buyers = db.buyers.filter(function (x) { return x.id !== id; });
-    addEvent({ type: 'buyer_del', date: DB.todayISO(), note: b.name });
-    closeSheet(); go('sales');
+    b.deletedAt = null; b.deletedBy = null;
+    db.events.forEach(function (e) {
+      if (e.type === 'buyer_del' && e.buyerId === id && !e.deletedAt) { e.deletedAt = Date.now(); e.deletedBy = db.currentUserId; }
+    });
+    save(); render();
+  }
+  // изтриване на продажба (работник или админ) — soft, админ може да я върне от дневника
+  function deleteSale(saleId) {
+    var s = (db.sales || []).find(function (x) { return x.id === saleId; });
+    if (!s || s.deletedAt) return;
+    if (!confirm('Да изтрия ли тази продажба? Админ може да я върне от дневника.')) return;
+    var ev = db.events.find(function (e) { return e.type === 'sale_add' && e.saleId === saleId && !e.deletedAt; });
+    if (ev) softDelete(ev.id);               // маркира записа в дневника и продажбата като изтрити
+    else { setSaleDeleted(saleId, true); save(); }
+    render();
   }
 
   // ---- Offline indicator -------------------------------------------------
