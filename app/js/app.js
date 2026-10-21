@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.2.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.3.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -2632,25 +2632,42 @@
     go('home');
   }
 
-  function sheetNewSale(buyerId) {
+  var _saleDraft = null; // пази попълнената продажба, докато се създава нов купувач
+  function sheetNewSale(buyerId, draft) {
+    draft = draft || {};
+    var noBuyers = db.buyers.length === 0;
     openSheet('<h3>Нова продажба</h3>' +
-      '<div class="field"><label>Купувач</label><select id="saleBuyer" class="input">' +
-      db.buyers.map(function (b) { return '<option value="' + b.id + '"' + (b.id === buyerId ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="field"><label>Дата</label><input id="saleDate" type="date" class="input" value="' + DB.todayISO() + '"/></div>' +
-      '<div class="row"><div class="field"><label>Количество (кг)</label><input id="saleKg" type="number" class="input" placeholder="0"/></div>' +
-      '<div class="field"><label>Цена (€/кг)</label><input id="salePrice" type="number" class="input" placeholder="0"/></div></div>' +
-      '<div class="field"><label>Бележка</label><input id="saleNote" class="input" placeholder="по избор"/></div>' +
-      '<button class="btn" data-action="savesale">💾 Запази продажба</button>' +
+      '<div class="field"><label>Купувач</label>' +
+      (noBuyers
+        ? '<p class="muted" style="font-size:13px;margin:0 0 8px">Още няма купувачи. Натисни бутона долу, за да създадеш нов.</p>'
+        : '<select id="saleBuyer" class="input">' +
+          db.buyers.map(function (b) { return '<option value="' + b.id + '"' + (b.id === buyerId ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>') +
+      '</div>' +
+      '<button class="btn ghost" style="margin:-4px 0 12px" data-action="newbuyerinsale">➕ Нов купувач</button>' +
+      '<div class="field"><label>Дата</label><input id="saleDate" type="date" class="input" value="' + (draft.date || DB.todayISO()) + '"/></div>' +
+      '<div class="row"><div class="field"><label>Количество (кг)</label><input id="saleKg" type="number" class="input" placeholder="0" value="' + (draft.kg != null ? draft.kg : '') + '"/></div>' +
+      '<div class="field"><label>Цена (€/кг)</label><input id="salePrice" type="number" class="input" placeholder="0" value="' + (draft.price != null ? draft.price : '') + '"/></div></div>' +
+      '<div class="field"><label>Бележка</label><input id="saleNote" class="input" placeholder="по избор" value="' + esc(draft.note || '') + '"/></div>' +
+      (noBuyers ? '' : '<button class="btn" data-action="savesale">💾 Запази продажба</button>') +
       '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
   }
+  // капва попълненото в продажбата, за да не се губи при създаване на нов купувач
+  function captureSaleDraft() {
+    _saleDraft = {
+      date: el('saleDate') ? el('saleDate').value : DB.todayISO(),
+      kg: el('saleKg') ? el('saleKg').value : '',
+      price: el('salePrice') ? el('salePrice').value : '',
+      note: el('saleNote') ? el('saleNote').value : ''
+    };
+  }
 
-  function sheetNewBuyer() {
+  function sheetNewBuyer(fromSale) {
     openSheet('<h3>Нов купувач</h3>' +
       '<div class="field"><label>Име</label><input id="bName" class="input" placeholder="Име и фамилия"/></div>' +
       '<div class="field"><label>Телефон</label><input id="bPhone" class="input" placeholder="+359..."/></div>' +
       '<div class="field"><label>Бележка</label><textarea id="bNote" class="input" placeholder="по избор"></textarea></div>' +
-      '<button class="btn" data-action="savebuyer">💾 Запази купувач</button>' +
-      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>');
+      '<button class="btn" data-action="savebuyer' + (fromSale ? ':sale' : '') + '">💾 Запази купувач</button>' +
+      '<button class="btn ghost mt" data-action="' + (fromSale ? 'backtosale' : 'closesheet') + '">Отказ</button>');
   }
 
   function sheetEditBuyer(id) {
@@ -3034,7 +3051,9 @@
       case 'newsalefor': sheetNewSale(parts[1]); break;
       case 'savesale': saveSale(); break;
       case 'newbuyer': sheetNewBuyer(); break;
-      case 'savebuyer': saveBuyer(); break;
+      case 'newbuyerinsale': captureSaleDraft(); sheetNewBuyer(true); break;
+      case 'backtosale': sheetNewSale(null, _saleDraft); _saleDraft = null; break;
+      case 'savebuyer': saveBuyer(parts[1] === 'sale'); break;
       case 'editbuyer': sheetEditBuyer(parts[1]); break;
       case 'saveeditbuyer': saveEditBuyer(parts[1]); break;
       case 'delbuyer': deleteBuyer(parts[1]); break;
@@ -4254,10 +4273,12 @@
     if (changed) DB.save(db);
     return changed;
   }
-  function saveBuyer() {
+  function saveBuyer(fromSale) {
     var name = (el('bName').value || '').trim(); if (!name) { el('bName').focus(); return; }
-    db.buyers.push({ id: DB.uid('buy'), name: name, phone: fmtPhone(el('bPhone').value), note: el('bNote').value, createdAt: Date.now() });
+    var id = DB.uid('buy');
+    db.buyers.push({ id: id, name: name, phone: fmtPhone(el('bPhone').value), note: el('bNote').value, createdAt: Date.now() });
     addEvent({ type: 'buyer_add', date: DB.todayISO(), note: name });
+    if (fromSale) { sheetNewSale(id, _saleDraft); _saleDraft = null; return; }
     closeSheet(); go('sales');
   }
 
