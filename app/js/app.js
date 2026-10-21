@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.4.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.4.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -393,6 +393,7 @@
     return src ? '<img src="' + src + '" alt="" style="width:100%;height:100%;object-fit:contain"/>' : '🪣';
   }
   function activeEvents() { return db.events.filter(function (e) { return !e.deletedAt; }); }
+  function activeSales() { return (db.sales || []).filter(function (s) { return !s.deletedAt; }); }
 
   function fmtDate(iso) {
     if (!iso) return '';
@@ -754,6 +755,7 @@
     e.deletedBy = db.currentUserId;
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, true);
     if (e.type === 'photo' && e.photoId) setPhotoDeleted(e.photoId, true, e.treeId);
+    if (e.type === 'sale_add' && e.saleId) setSaleDeleted(e.saleId, true);
     save();
   }
   function restore(evId) {
@@ -762,14 +764,24 @@
     e.deletedAt = null; e.deletedBy = null;
     if (e.type === 'tree_edit' && e.changes && e.treeId) revertTreeChanges(e, false);
     if (e.type === 'photo' && e.photoId) setPhotoDeleted(e.photoId, false, e.treeId);
+    if (e.type === 'sale_add' && e.saleId) setSaleDeleted(e.saleId, false);
     save();
   }
   // Окончателно маха запис от дневника (за тестови записи) — не може да се върне.
   function purgeEvent(evId) {
     var i = db.events.findIndex(function (x) { return x.id === evId; });
     if (i === -1) return;
+    var e = db.events[i];
+    if (e && e.type === 'sale_add' && e.saleId && db.sales) {
+      db.sales = db.sales.filter(function (s) { return s.id !== e.saleId; }); // махни и самата продажба
+    }
     db.events.splice(i, 1);
     save(); render();
+  }
+  // Маркира/връща продажбата като изтрита (върви заедно със записа ѝ в дневника).
+  function setSaleDeleted(saleId, deleted) {
+    var s = (db.sales || []).find(function (x) { return x.id === saleId; });
+    if (s) { s.deletedAt = deleted ? Date.now() : null; s.deletedBy = deleted ? db.currentUserId : null; }
   }
   // Изтриване/връщане на снимка заедно със записа ѝ в дневника.
   function setPhotoDeleted(photoId, deleted, treeId) {
@@ -1964,8 +1976,8 @@
     var year = db.settings.seasonYear;
     var harv = activeEvents().filter(function (e) { return e.type === 'harvest_tree' || e.type === 'harvest_ground'; });
     var totalKg = harv.reduce(function (s, e) { return s + eventKg(e); }, 0);
-    var soldKg = db.sales.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
-    var revenue = db.sales.reduce(function (s, x) { return s + (x.total || 0); }, 0);
+    var soldKg = activeSales().reduce(function (s, x) { return s + (x.kg || 0); }, 0);
+    var revenue = activeSales().reduce(function (s, x) { return s + (x.total || 0); }, 0);
 
     // добив по етапи за избрания изглед (сезон / месец / седмици)
     var MONTHS_BG = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
@@ -2114,7 +2126,7 @@
   // =======================================================================
   function viewSales() {
     var buyers = db.buyers.map(function (b) {
-      var purchases = db.sales.filter(function (s) { return s.buyerId === b.id; });
+      var purchases = activeSales().filter(function (s) { return s.buyerId === b.id; });
       var kg = purchases.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
       var spent = purchases.reduce(function (s, x) { return s + (x.total || 0); }, 0);
       return { b: b, count: purchases.length, kg: kg, spent: spent };
@@ -2137,7 +2149,7 @@
   function viewBuyer(id) {
     var b = db.buyers.find(function (x) { return x.id === id; });
     if (!b) return topbar('Купувач', { back: 'nav:sales' }) + '<div class="content">Няма.</div>';
-    var purchases = db.sales.filter(function (s) { return s.buyerId === id; }).sort(function (a, c) { return c.date < a.date ? -1 : 1; });
+    var purchases = activeSales().filter(function (s) { return s.buyerId === id; }).sort(function (a, c) { return c.date < a.date ? -1 : 1; });
     return topbar(b.name, { back: 'nav:sales' }) + '<div class="content">' +
       '<div class="card"><div style="display:flex;gap:12px;align-items:center">' +
       '<div class="avatar" style="width:52px;height:52px;font-size:19px">' + initials(b.name) + '</div>' +
@@ -2707,7 +2719,7 @@
 
   // разбивка на продажбите (транзакции) — отваря се от плочките „продадени" и „приходи" в Статистика
   function showSalesBreakdown() {
-    var sales = db.sales.slice().sort(function (a, b) { return b.date < a.date ? -1 : (b.date > a.date ? 1 : (b.createdAt || 0) - (a.createdAt || 0)); });
+    var sales = activeSales().slice().sort(function (a, b) { return b.date < a.date ? -1 : (b.date > a.date ? 1 : (b.createdAt || 0) - (a.createdAt || 0)); });
     var totalKg = sales.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
     var totalRev = sales.reduce(function (s, x) { return s + (x.total || 0); }, 0);
     var rows = sales.length ? sales.map(function (s) {
@@ -4304,7 +4316,7 @@
   function saveSale() {
     var kg = parseFloat(el('saleKg').value) || 0;
     var price = parseFloat(el('salePrice').value) || 0;
-    var sale = { id: DB.uid('sale'), buyerId: el('saleBuyer').value, date: el('saleDate').value, kg: kg, pricePerKg: price, total: kg * price, note: el('saleNote').value, createdBy: db.currentUserId };
+    var sale = { id: DB.uid('sale'), buyerId: el('saleBuyer').value, date: el('saleDate').value, kg: kg, pricePerKg: price, total: kg * price, note: el('saleNote').value, createdBy: db.currentUserId, createdAt: Date.now(), deletedAt: null, deletedBy: null };
     db.sales.unshift(sale);
     var bname = (db.buyers.find(function (x) { return x.id === sale.buyerId; }) || {}).name || 'Купувач';
     addEvent({ type: 'sale_add', date: sale.date, note: bname, kg: kg, pricePerKg: price, total: sale.total, saleId: sale.id });
@@ -4330,6 +4342,7 @@
     var changed = false;
     db.sales.forEach(function (s) {
       if (!s || !s.id) return;
+      if (s.deletedAt) return; // изтритите продажби не връщаме в дневника
       var ts = saleEventTs(s);
       var ex = byId[s.id];
       if (ex) {
@@ -4367,7 +4380,7 @@
   function deleteBuyer(id) {
     if (!isAdmin()) return;
     var b = db.buyers.find(function (x) { return x.id === id; }); if (!b) return;
-    if (db.sales.some(function (s) { return s.buyerId === id; })) {
+    if (db.sales.some(function (s) { return s.buyerId === id && !s.deletedAt; })) {
       alert('Този купувач има записани продажби и не може да се изтрие.');
       return;
     }
