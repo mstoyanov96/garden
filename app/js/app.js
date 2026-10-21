@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.3.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.3.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -2113,20 +2113,24 @@
   //  SALES + BUYERS
   // =======================================================================
   function viewSales() {
+    var buyers = db.buyers.map(function (b) {
+      var purchases = db.sales.filter(function (s) { return s.buyerId === b.id; });
+      var kg = purchases.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
+      var spent = purchases.reduce(function (s, x) { return s + (x.total || 0); }, 0);
+      return { b: b, count: purchases.length, kg: kg, spent: spent };
+    }).sort(function (a, c) { return c.spent - a.spent; });
     return topbar('Клиенти и продажби', { back: 'nav:home' }) + '<div class="content">' +
       '<button class="btn mb" data-action="newsale">➕ Нова продажба</button>' +
       '<div class="section-title">Купувачи</div>' +
-      db.buyers.map(function (b) {
-        var purchases = db.sales.filter(function (s) { return s.buyerId === b.id; });
-        var kg = purchases.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
+      buyers.map(function (r) {
+        var b = r.b;
         return '<div class="card" data-action="buyer:' + b.id + '" style="cursor:pointer">' +
           '<div style="display:flex;align-items:center;gap:12px">' +
           '<div class="avatar">' + initials(b.name) + '</div>' +
           '<div style="flex:1"><b>' + esc(b.name) + '</b><div class="muted" style="font-size:13px">' + esc(b.phone || '') + '</div>' +
-          '<div class="muted" style="font-size:12px">' + purchases.length + ' покупки · ' + fmtKg(kg) + ' кг</div></div>' +
+          '<div class="muted" style="font-size:12px">' + r.count + ' покупки · ' + fmtKg(r.kg) + ' кг · ' + (r.spent || 0).toFixed(2) + ' €</div></div>' +
           '<span style="font-size:22px;color:var(--muted)">›</span></div></div>';
       }).join('') +
-      '<button class="btn ghost mt" data-action="newbuyer">➕ Нов купувач</button>' +
       '</div>';
   }
 
