@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.2.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.2.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -743,6 +743,7 @@
     ev.deletedBy = null;
     db.events.unshift(ev);
     if (_seenEventIds) _seenEventIds[ev.id] = 1; // собствените записи не са „нови известия"
+    recordOpen(); // всяко действие значи, че човекът е бил онлайн (вкл. save+push)
     save();
     sendPushForEvent(ev); // push към останалите, дори при тяхно затворено приложение
   }
@@ -1086,9 +1087,13 @@
   //  ОБЛАЧНА СИНХРОНИЗАЦИЯ
   // =======================================================================
   function setSyncStatus(s) {
+    var was = syncStatus;
     syncStatus = s;
     var box = el('syncStatus');
     if (box) box.innerHTML = syncStatusHtml();
+    // Щом връзката се включи (shadow-ът вече е изграден), отбелязваме „онлайн" така,
+    // че да се качи в облака — иначе първоначалният snapshot презаписва lastOnline.
+    if (s === 'on' && was !== 'on' && db.currentUserId) recordOpen();
   }
   function syncStatusText() {
     return syncStatus === 'on' ? 'включена'
