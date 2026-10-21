@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.4.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.4.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -26,7 +26,6 @@
   var careTreePreset = '';  // предварително избрано дърво при грижа от профила на дърво
   var careTrees = [];       // избрани дървета (id) когато careScope === 'trees' (от картата)
   var mapSelect = false;    // режим на избор на няколко дървета върху картата
-  var mapPaint = false;     // „рисуване“ на избора: плъзгане по дърветата вместо скрол
   var mapSelected = [];     // id на избраните дървета върху картата
   var MAP_MODE_KEY = 'walnut_mapmode'; // пази се на устройството (не се синхронизира)
   var mapMode = (function () { try { return localStorage.getItem(MAP_MODE_KEY) === 'harvest' ? 'harvest' : 'health'; } catch (e) { return 'health'; } })();   // 'health' | 'harvest' — по какво се оцветяват дърветата на картата
@@ -107,8 +106,8 @@
     if (!ts) return 'никога';
     var diff = Date.now() - ts;
     if (diff < 60000) return 'току-що';
-    if (diff < 3600000) return Math.floor(diff / 60000) + ' мин. преди';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч. преди';
+    if (diff < 3600000) return 'преди ' + Math.floor(diff / 60000) + ' мин.';
+    if (diff < 86400000) return 'преди ' + Math.floor(diff / 3600000) + ' ч.';
     var d = new Date(ts);
     var mo = ['ян', 'фев', 'март', 'апр', 'май', 'юни', 'юли', 'авг', 'сеп', 'окт', 'ное', 'дек'];
     var hh = ('0' + d.getHours()).slice(-2), mm = ('0' + d.getMinutes()).slice(-2);
@@ -1080,7 +1079,7 @@
     app.innerHTML = html;
     bind();
     if (route.name === 'walk') startWalk();
-    if (route.name === 'home') { initMapSelect(); renderMapBar(); applyPaintClass(); initStatSwipe(); }
+    if (route.name === 'home') { initMapSelect(); renderMapBar(); initStatSwipe(); }
   }
   var _lastHTML = '';
 
@@ -2828,28 +2827,24 @@
     else { mapSelected.splice(i, 1); markCell(id, false); }
     renderMapBar();
   }
-  // слага/маха клас на картата, за да спре скрола, докато „рисуваме" (режим рисуване)
-  function applyPaintClass() {
-    var mw = el('mapwrap'); if (mw) mw.classList.toggle('paintmode', mapSelect && mapPaint);
+  // слага/маха клас на картата, за да спре скрола, докато „рисуваме" (след задържане)
+  function paintClass(on) {
+    var mw = el('mapwrap'); if (mw) mw.classList.toggle('painting', on);
   }
   function clearMapSelect() {
     mapSelect = false;
-    mapPaint = false;
     mapSelected.slice().forEach(function (id) { markCell(id, false); });
     mapSelected = [];
-    applyPaintClass();
+    paintClass(false);
     renderMapBar();
   }
   function renderMapBar() {
     var bar = el('mapbar'); if (!bar) return;
     if (!mapSelect && !mapSelected.length) { bar.classList.remove('open'); bar.innerHTML = ''; return; }
     var n = mapSelected.length;
-    var info = mapPaint
-      ? 'Плъзни пръст по дърветата'
-      : (n ? '<b>' + n + '</b> избрани дървета' : 'Докосни дърво за избор');
+    var info = n ? '<b>' + n + '</b> избрани дървета' : 'Задръж върху дърво и плъзни · скролни за надолу';
     bar.innerHTML = '<div class="mapbar-info">' + info + '</div>' +
       '<div class="mapbar-actions">' +
-      (mapSelect ? '<button class="btn sm ' + (mapPaint ? '' : 'secondary') + '" data-action="mappainttoggle" aria-label="Рисуване на избор">' + (mapPaint ? '✋ Скрол' : '✏️ Рисувай') + '</button>' : '') +
       (n ? '<button class="btn sm" data-action="mapcare:fertilize">🌱 Торене</button>' +
         '<button class="btn sm" data-action="mapcare:water">💧 Поливане</button>' +
         (isAdmin() ? '<button class="btn sm secondary" data-action="mapbulkedit" aria-label="Редактирай">✏️</button>' : '') : '') +
@@ -2857,50 +2852,67 @@
       '</div>';
     bar.classList.add('open');
   }
-  // закача слушатели за „рисуване" на избора (плъзгане по дърветата в режим рисуване)
+  // закача слушатели за задържане + влачене върху картата (задържи за да рисуваш; инак скрол)
   function initMapSelect() {
     if (initMapSelect._done) return;
     initMapSelect._done = true;
-    var drag = null;               // { last, on } — активно рисуване
+    var drag = null;               // { startId, sx, sy, painting, on, last, lp }
     var usingTouch = false;        // на тъч устройства пренебрегваме емулираните мишка-събития
+    var HOLD_MS = 280;             // задържане, преди да тръгне рисуването
+    var MOVE_TOL = 10;             // px толеранс: движение преди задържане = скрол
     function treeIdAt(x, y) {
       var elp = document.elementFromPoint(x, y);
       var cell = elp && elp.closest ? elp.closest('.tree-cell') : null;
       return cell ? cell.getAttribute('data-tid') : null;
     }
-    // започва рисуване; връща true, ако сме хванали дърво (викащият спира скрола)
     function start(x, y) {
-      if (!mapSelect || !mapPaint) return false;
-      var id = treeIdAt(x, y); if (!id) return false;
-      var on = mapSelected.indexOf(id) === -1; // ако не е избрано → рисуваме избор; иначе триене
-      drag = { last: id, on: on };
-      setMapTree(id, on);
-      mapSuppressClick = true;      // да не toggle-не клика след рисуване
-      return true;
+      if (!mapSelect) return;
+      var id = treeIdAt(x, y); if (!id) return;
+      drag = { startId: id, sx: x, sy: y, painting: false, on: true, last: null, lp: null };
+      drag.lp = setTimeout(function () {
+        if (!drag) return;
+        drag.painting = true;
+        drag.on = mapSelected.indexOf(drag.startId) === -1; // не е избрано → рисуваме; инак триене
+        drag.last = drag.startId;
+        paintClass(true);           // спира скрола, докато рисуваме
+        setMapTree(drag.startId, drag.on);
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch (er) {} }
+      }, HOLD_MS);
     }
-    // продължава рисуване; връща true, ако рисуваме (викащият спира скрола)
+    // връща true, ако рисуваме (викащият трябва да спре скрола)
     function move(x, y) {
       if (!drag) return false;
+      if (!drag.painting) {
+        if (Math.abs(x - drag.sx) > MOVE_TOL || Math.abs(y - drag.sy) > MOVE_TOL) {
+          clearTimeout(drag.lp); drag = null; // движение преди задържане → това е скрол
+        }
+        return false;
+      }
       var id = treeIdAt(x, y);
       if (id && id !== drag.last) { drag.last = id; setMapTree(id, drag.on); }
       return true;
     }
-    function end() { drag = null; }
-    // тъч (телефон)
+    function end() {
+      if (!drag) return;
+      clearTimeout(drag.lp);
+      if (drag.painting) mapSuppressClick = true; // да не toggle-не клика след рисуване
+      paintClass(false);
+      drag = null;
+    }
+    // тъч (телефон) — touchstart е passive, за да не пречи на скрола
     document.addEventListener('touchstart', function (e) {
       usingTouch = true;
-      if (e.touches.length !== 1) { drag = null; return; }
-      var t = e.touches[0];
-      if (start(t.clientX, t.clientY)) e.preventDefault();
-    }, { passive: false });
+      if (e.touches.length !== 1) { if (drag) clearTimeout(drag.lp); drag = null; return; }
+      var t = e.touches[0]; start(t.clientX, t.clientY);
+    }, { passive: true });
     document.addEventListener('touchmove', function (e) {
       var t = e.touches[0]; if (!t) return;
-      if (move(t.clientX, t.clientY)) e.preventDefault();
+      if (move(t.clientX, t.clientY)) e.preventDefault(); // спира скрола само докато рисуваме
     }, { passive: false });
     document.addEventListener('touchend', end, { passive: true });
     document.addEventListener('touchcancel', end, { passive: true });
     // мишка (десктоп, за тест)
-    document.addEventListener('mousedown', function (e) { if (usingTouch) return; if (start(e.clientX, e.clientY)) e.preventDefault(); });
+    document.addEventListener('mousedown', function (e) { if (usingTouch) return; start(e.clientX, e.clientY); });
     document.addEventListener('mousemove', function (e) { if (usingTouch) return; if (move(e.clientX, e.clientY)) e.preventDefault(); });
     document.addEventListener('mouseup', function () { if (usingTouch) return; end(); });
   }
@@ -2990,8 +3002,6 @@
       case 'mapselecttoggle':
         if (mapSelect || mapSelected.length) clearMapSelect(); else mapSelect = true;
         render(); break;
-      case 'mappainttoggle':
-        mapPaint = !mapPaint; applyPaintClass(); renderMapBar(); break;
       case 'mapmode': mapMode = (parts[1] === 'harvest' ? 'harvest' : 'health'); try { localStorage.setItem(MAP_MODE_KEY, mapMode); } catch (e) {} render(); break;
       case 'statperiod': toggleStatPeriod(); break;
       case 'statstep': stepStatPeriod(parseInt(parts[1], 10) || 0); break;

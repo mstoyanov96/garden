@@ -231,7 +231,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .map-toolbar #fVar{flex:1.15 1 0;}
 .map-toolbar #fHealth{flex:1 1 0;}
 .mapwrap{overflow:hidden;border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow);padding:12px 10px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
-.mapwrap.paintmode{touch-action:none;}
+.mapwrap.painting{touch-action:none;box-shadow:0 0 0 2px var(--blue) inset,var(--shadow);}
 .tree-cell svg,.tree-cell .svgwrap,.tree-cell .code{pointer-events:none;}
 .grid{
   display:grid;gap:7px 5px;justify-content:stretch;align-items:start;width:100%;
