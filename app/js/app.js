@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.2.3';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.2.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -1677,11 +1677,11 @@
           (ai.count > 0
             ? 'Изчислен от ' + ai.count + ' сортиране' + (ai.count === 1 ? '' : 'ия') + ' (⚪ ' + fmtKg(ai.white) + ' · ⚫ ' + fmtKg(ai.black) + ' кг).' + (isAdmin() ? ' За всяко долу избери дали влиза в средното.' : '')
             : 'Няма избрани сортирания — ползва се калибровката „среден дял бели" от Настройки.') +
-          '</p></div>';
+          '</p>' +
+          '<p class="muted" style="font-size:12px;margin:6px 0 0">Изтегленото е след приспадане на теглото на кофата, ако е имало такава.</p></div>';
       })() +
       '<div class="section-title">Записи</div>' +
-      '<div class="card">' + sortList + '</div>' +
-      '<p class="muted" style="font-size:12px;margin:6px 2px 0">Изтегленото е след приспадане на теглото на кофата, ако е имало такава.</p>';
+      '<div class="card">' + sortList + '</div>';
   }
 
   // избор на кофа по картинки за сортиране (с опция „Без кофа") — отделно за бели/черни
