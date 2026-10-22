@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.4.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.4.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -2172,7 +2172,7 @@
         return '<div class="list-row"><div class="ic harvest">💰</div><div class="tx"><b>' + s.kg + ' кг · ' + (s.total || 0).toFixed(2) + ' €</b>' +
           '<small>' + (s.pricePerKg || 0) + ' €/кг' + (s.note ? ' · ' + esc(s.note) : '') + '</small></div>' +
           '<div class="meta">' + fmtDate(s.date) +
-          '<div><button class="btn sm ghost danger" style="margin-top:6px;height:30px;border-color:#f3c9c6;color:#b23a33" data-action="delsale:' + s.id + '">🗑️ Изтрий</button></div>' +
+          '<div><button class="btn sm ghost" style="margin-top:6px;height:30px;background:#fdeceb;border-color:#e8a7a1;color:#b23a33" data-action="delsale:' + s.id + '">🗑️ Изтрий</button></div>' +
           '</div></div>';
       }).join('') : '<p class="muted">Още няма покупки.</p>') + '</div>' +
       '<button class="btn" data-action="newsalefor:' + b.id + '">➕ Добави продажба</button>' +
