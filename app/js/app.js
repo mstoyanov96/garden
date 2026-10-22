@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.4.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.5.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -3062,6 +3062,10 @@
       case 'treecare': careTab = parts[1]; careScope = 'tree'; careTreePreset = parts[2]; go('care'); break;
       case 'savetree': saveTreeEdit(parts[1]); break;
       case 'savegps': saveGps(parts[1]); break;
+      case 'gpsstop': gpsFinishSampling(); break;
+      case 'gpsrestart': saveGps(gpsFix && gpsFix.treeId); break;
+      case 'gpssave': gpsCommit(); break;
+      case 'gpscancel': gpsCancel(); break;
       case 'sethealth': setHealth(parts[1], parts[2]); break;
       case 'addphoto': addPhoto(parts[1]); break;
       case 'setcover': setCover(parts[1], parts[2]); break;
@@ -4046,20 +4050,119 @@
     go('home');
   }
 
+  // ---- Засичане на GPS с усредняване на няколко измервания --------------
+  var gpsFix = null;            // { active, watchId, treeId, samples:[], timer, startedAt, done }
+  var GPS_TARGET = 15;          // колко измервания целим преди авто-край
+  var GPS_MAX_MS = 30000;       // авто-край след толкова време
+
+  function gpsCompute() {
+    if (!gpsFix || !gpsFix.samples.length) return null;
+    var all = gpsFix.samples;
+    var best = Math.min.apply(null, all.map(function (s) { return s.acc; }));
+    // ползваме само по-добрите измервания (изхвърляме явно лошите)
+    var use = all.filter(function (s) { return s.acc <= Math.max(best * 2, 20); });
+    if (use.length < 3) use = all.slice();
+    var sw = 0, sLat = 0, sLng = 0;
+    use.forEach(function (s) { var w = 1 / (s.acc * s.acc); sw += w; sLat += s.lat * w; sLng += s.lng * w; });
+    var mean = { lat: sLat / sw, lng: sLng / sw };
+    var sumd = 0;
+    use.forEach(function (s) { var d = distM(mean, s); sumd += d * d; });
+    var disp = Math.sqrt(sumd / use.length);        // разсейване (повторяемост) в метри
+    var acc = Math.round(Math.max(best * 0.8, disp, 2));
+    return { lat: mean.lat, lng: mean.lng, acc: acc, used: use.length, total: all.length, best: Math.round(best), disp: Math.round(disp) };
+  }
+
+  function gpsSheetHtml() {
+    var t = tree(gpsFix.treeId);
+    var c = gpsCompute();
+    var secs = Math.round((Date.now() - gpsFix.startedAt) / 1000);
+    var head = '<h3>🛰️ Засичане на GPS — ' + esc(t ? t.code : '') + '</h3>' +
+      '<p class="muted">Застани до ствола, дръж телефона неподвижно и изчакай. Колкото повече измервания — толкова по-точно.</p>';
+    var body;
+    if (!c) {
+      body = '<div class="card"><p>📡 Търся сигнал… (' + secs + ' сек)</p>' +
+        '<p class="muted">Излез на открито и разреши достъп до местоположението.</p></div>';
+    } else {
+      var bar = Math.min(100, Math.round(c.total / GPS_TARGET * 100));
+      body = '<div class="card">' +
+        '<div class="kv"><span class="k">📍 Измервания</span><span class="v">' + c.total + '</span></div>' +
+        '<div class="kv"><span class="k">🎯 Най-добро</span><span class="v">±' + c.best + ' м</span></div>' +
+        '<div class="kv"><span class="k">📈 Разсейване</span><span class="v">±' + c.disp + ' м</span></div>' +
+        '<div class="kv"><span class="k">✅ Усреднено</span><span class="v">±' + c.acc + ' м</span></div>' +
+        '<div style="height:10px;background:#e6efe8;border-radius:6px;overflow:hidden;margin-top:10px">' +
+        '<div style="height:100%;background:#2f9e52;width:' + bar + '%;transition:width .3s"></div></div>' +
+        (gpsFix.done ? '' : '<p class="muted" style="margin:8px 0 0">Събирам измервания… (' + secs + ' сек)</p>') +
+        '</div>';
+    }
+    var save = c ? '<button class="btn" data-action="gpssave">✅ Запиши тази точка (±' + c.acc + ' м)</button>' : '';
+    var controls = gpsFix.done
+      ? (save + '<button class="btn secondary mt" data-action="gpsrestart">🔄 Засечи пак</button>')
+      : (c ? '<button class="btn" data-action="gpsstop">⏹️ Стига, покажи резултата</button>' : '');
+    return head + body + controls + '<button class="btn ghost mt" data-action="gpscancel">Отказ</button>';
+  }
+
+  function gpsUpdateSheet() {
+    if (!gpsFix || !gpsFix.active) return;
+    var s = el('sheet');
+    if (!s || !s.classList.contains('open')) return;
+    var inner = s.querySelector('.sheet');
+    if (inner) inner.innerHTML = '<div class="grip"></div>' + gpsSheetHtml();
+  }
+
+  function gpsStopWatch() {
+    if (gpsFix && gpsFix.watchId != null && navigator.geolocation) {
+      try { navigator.geolocation.clearWatch(gpsFix.watchId); } catch (e) {}
+    }
+    if (gpsFix && gpsFix.timer) { clearTimeout(gpsFix.timer); gpsFix.timer = null; }
+    if (gpsFix) gpsFix.watchId = null;
+  }
+
+  function gpsFinishSampling() {
+    if (!gpsFix) return;
+    gpsStopWatch();
+    gpsFix.done = true;
+    if (!gpsCompute()) {
+      alert('Не успях да хвана сигнал. Излез на открито и опитай пак.');
+      gpsFix = null; closeSheet(); return;
+    }
+    gpsUpdateSheet();
+  }
+
   function saveGps(id) {
     var t = tree(id); if (!t) return;
     if (!navigator.geolocation) { alert('Телефонът не поддържа GPS.'); return; }
-    alert('Застани до дървото и натисни OK. Изчакай координатите...');
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      var beforeGps = t.gps || null;
-      t.gps = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy || 0), ts: Date.now() };
-      save();
-      addEvent({ type: 'tree_edit', treeId: t.id, date: DB.todayISO(), note: 'записани GPS координати (±' + t.gps.acc + ' м)', changes: { gps: { before: beforeGps, after: t.gps } } });
-      alert('Записано! Точност ±' + t.gps.acc + ' м.');
-      render();
+    gpsStopWatch();
+    gpsFix = { active: true, watchId: null, treeId: id, samples: [], timer: null, startedAt: Date.now(), done: false };
+    openSheet(gpsSheetHtml());
+    gpsFix.watchId = navigator.geolocation.watchPosition(function (pos) {
+      if (!gpsFix || !gpsFix.active || gpsFix.done) return;
+      var acc = Math.max(1, Math.round(pos.coords.accuracy || 99));
+      gpsFix.samples.push({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: acc, ts: Date.now() });
+      gpsUpdateSheet();
+      var good = gpsFix.samples.filter(function (s) { return s.acc <= 25; });
+      if (good.length >= GPS_TARGET) gpsFinishSampling();
     }, function (err) {
+      if (!gpsFix || gpsFix.done) return;
+      if (gpsFix.samples.length) { gpsFinishSampling(); return; }
       alert('Няма достъп до GPS: ' + (err && err.message ? err.message : 'разреши местоположение в браузъра.'));
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      gpsFix = null; closeSheet();
+    }, { enableHighAccuracy: true, timeout: GPS_MAX_MS, maximumAge: 0 });
+    gpsFix.timer = setTimeout(function () { gpsFinishSampling(); }, GPS_MAX_MS);
+  }
+
+  function gpsCommit() {
+    if (!gpsFix) return;
+    var t = tree(gpsFix.treeId); if (!t) { gpsFix = null; closeSheet(); return; }
+    var c = gpsCompute(); if (!c) return;
+    var beforeGps = t.gps || null;
+    t.gps = { lat: c.lat, lng: c.lng, acc: c.acc, n: c.total, ts: Date.now() };
+    save();
+    addEvent({ type: 'tree_edit', treeId: t.id, date: DB.todayISO(), note: 'записани GPS координати (±' + c.acc + ' м, от ' + c.total + ' измервания)', changes: { gps: { before: beforeGps, after: t.gps } } });
+    gpsStopWatch(); gpsFix = null; closeSheet(); render();
+  }
+
+  function gpsCancel() {
+    gpsStopWatch(); gpsFix = null; closeSheet();
   }
 
   function saveCare(type) {
