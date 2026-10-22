@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.5.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.5.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -4077,18 +4077,25 @@
     var c = gpsCompute();
     var secs = Math.round((Date.now() - gpsFix.startedAt) / 1000);
     var head = '<h3>🛰️ Засичане на GPS — ' + esc(t ? t.code : '') + '</h3>' +
-      '<p class="muted">Застани до ствола, дръж телефона неподвижно и изчакай. Колкото повече измервания — толкова по-точно.</p>';
+      '<p class="muted">Застани до ствола, дръж телефона неподвижно и изчакай. Дърветата са на ~8 м едно от друго, затова цели точност под 4 м, за да не се бърка със съседа.</p>';
     var body;
     if (!c) {
       body = '<div class="card"><p>📡 Търся сигнал… (' + secs + ' сек)</p>' +
         '<p class="muted">Излез на открито и разреши достъп до местоположението.</p></div>';
     } else {
       var bar = Math.min(100, Math.round(c.total / GPS_TARGET * 100));
+      // цвят на стойността: зелено=добре, оранжево=горе-долу, червено=лошо
+      var gc = function (ok, warn) { return ok ? '#1c6b3a' : (warn ? '#c77d11' : '#b23a33'); };
+      var hint = function (txt) { return ' <span class="muted" style="font-weight:400;font-size:12px">' + txt + '</span>'; };
+      var row = function (label, valueTxt, color, hintTxt) {
+        return '<div class="kv"><span class="k">' + label + '</span>' +
+          '<span class="v" style="color:' + color + '">' + valueTxt + hint(hintTxt) + '</span></div>';
+      };
       body = '<div class="card">' +
-        '<div class="kv"><span class="k">📍 Измервания</span><span class="v">' + c.total + '</span></div>' +
-        '<div class="kv"><span class="k">🎯 Най-добро</span><span class="v">±' + c.best + ' м</span></div>' +
-        '<div class="kv"><span class="k">📈 Разсейване</span><span class="v">±' + c.disp + ' м</span></div>' +
-        '<div class="kv"><span class="k">✅ Усреднено</span><span class="v">±' + c.acc + ' м</span></div>' +
+        row('📍 Измервания', c.total, gc(c.total >= 10, c.total >= 6), '(добре: 10+, най-добре 15)') +
+        row('🎯 Най-добро', '±' + c.best + ' м', gc(c.best <= 3, c.best <= 4), '(добре: под 3 м)') +
+        row('📈 Разсейване', '±' + c.disp + ' м', gc(c.disp <= 3, c.disp <= 5), '(добре: под 3 м)') +
+        row('✅ Усреднено', '±' + c.acc + ' м', gc(c.acc <= 3, c.acc <= 4), '(добре: под 4 м, отл. под 3)') +
         '<div style="height:10px;background:#e6efe8;border-radius:6px;overflow:hidden;margin-top:10px">' +
         '<div style="height:100%;background:#2f9e52;width:' + bar + '%;transition:width .3s"></div></div>' +
         (gpsFix.done ? '' : '<p class="muted" style="margin:8px 0 0">Събирам измервания… (' + secs + ' сек)</p>') +
