@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.6.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.6.2';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -685,12 +685,12 @@
 
   // ---- Ориентири на картата (порти, цистерна, спирка, гнездо) ------------
   var LM_ICONS = {
-    gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="5" y="4.4" width="14" height="2.2" rx="1"/><rect x="5" y="17.4" width="14" height="2.2" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
-    gateUp: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.2 V8.7"/><path d="M9.3 11.6 L12 8.7 L14.7 11.6"/></g></svg>',
+    gate: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#d4ecda" stroke="#8fc6a2" stroke-width="1.1"/><g fill="#1f7a43"><rect x="5" y="4.4" width="14" height="2.2" rx="1"/><rect x="5" y="17.4" width="14" height="2.2" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
+    gateUp: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#d4ecda" stroke="#8fc6a2" stroke-width="1.1"/><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.2 V8.7"/><path d="M9.3 11.6 L12 8.7 L14.7 11.6"/></g></svg>',
     cistern: '<svg viewBox="0 0 24 24"><path d="M6.8 7h10.4a2 2 0 0 1 2 2v8.6A3.4 3.4 0 0 1 15.8 21H8.2a3.4 3.4 0 0 1-3.4-3.4V9a2 2 0 0 1 2-2Z" fill="#3b8fe6"/><path d="M6.8 7h10.4a2 2 0 0 1 2 2v1.6H4.8V9a2 2 0 0 1 2-2Z" fill="#5aa6f0"/><rect x="9.3" y="2.7" width="5.4" height="4.6" rx="1.4" fill="#2f7fd1"/><path d="M12 10.8s-3 3.3-3 5.2a3 3 0 0 0 6 0c0-1.9-3-5.2-3-5.2Z" fill="#eaf4ff"/></svg>',
     riser: '<svg viewBox="0 0 24 24"><g fill="#3b8fe6"><rect x="10.2" y="12.4" width="3.6" height="9" rx="1"/><rect x="7.3" y="20.4" width="9.4" height="2.4" rx="1.1"/><path d="M12 7h5.7a1.5 1.5 0 0 1 1.5 1.5v3.7h-2.8v-2.5H12z"/><rect x="9.3" y="6" width="5.4" height="7.8" rx="1.5"/><rect x="10.5" y="1.8" width="3" height="5.4" rx="1.2"/><rect x="7.8" y="1.4" width="8.4" height="2.4" rx="1.2"/></g><path d="M17.5 14.1s-1.5 1.7-1.5 2.7a1.5 1.5 0 0 0 3 0c0-1-1.5-2.7-1.5-2.7z" fill="#7fc0f6"/></svg>',
     stop: '<svg viewBox="0 0 24 24"><rect x="3.3" y="5.3" width="17.4" height="10.8" rx="2.6" fill="#f3a53c"/><g fill="#fff"><rect x="5.2" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="9.3" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="13.4" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="17.2" y="7.4" width="1.6" height="3.5" rx="0.6"/></g><rect x="3.7" y="12.3" width="16.6" height="1.5" fill="#dd8c22"/><circle cx="7.4" cy="17" r="2.4" fill="#39404a"/><circle cx="7.4" cy="17" r="0.9" fill="#fff"/><circle cx="16.6" cy="17" r="2.4" fill="#39404a"/><circle cx="16.6" cy="17" r="0.9" fill="#fff"/></svg>',
-    nest: '<svg viewBox="0 0 24 24"><path d="M2.5 10.3c0 4.5 4.3 7.7 9.5 7.7s9.5-3.2 9.5-7.7Z" fill="#8a5a33"/><path d="M2.5 10.3h19c0 1.4-.4 2.6-1.2 3.7H3.7c-.8-1.1-1.2-2.3-1.2-3.7Z" fill="#9e6b3f"/><ellipse cx="9" cy="9.9" rx="2.5" ry="2.1" fill="#f4ecda"/><ellipse cx="14.6" cy="10.1" rx="2.5" ry="2.1" fill="#f4ecda"/></svg>'
+    nest: '<svg viewBox="0 0 24 24"><ellipse cx="11.5" cy="9.3" rx="5" ry="4.4" fill="#cf7b2c"/><path d="M8.2 8.2c2.8-1 5.2-.2 6.6 2-1.9 1.6-4.6 1.6-6.6.2z" fill="#b1631c"/><circle cx="15.2" cy="6.2" r="2.7" fill="#8a5a33"/><path d="M17.6 5.9l2.7-.7-1.9 2.2z" fill="#f2b33a"/><circle cx="15.9" cy="5.7" r="0.75" fill="#241708"/><path d="M2.5 11.6c0 4.4 4.3 7.4 9.5 7.4s9.5-3 9.5-7.4c-2.6 1.8-6 2.7-9.5 2.7s-6.9-.9-9.5-2.7Z" fill="#8a5a33"/><path d="M2.5 11.6c0 1.1.3 2.1.9 3.1 2.4 1.2 5.3 1.8 8.6 1.8s6.2-.6 8.6-1.8c.6-1 .9-2 .9-3.1-2.6 1.8-6 2.7-9.5 2.7s-6.9-.9-9.5-2.7Z" fill="#6f4522"/></svg>'
   };
   var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', riser: 'Щранг', stop: 'Спирка', nest: 'Гнездо' };
   // стандартни цветове на значките (ползват се и за бутона „върни цвета")
