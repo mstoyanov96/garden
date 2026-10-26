@@ -289,6 +289,7 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .grid .lm.gate{background:#cfe8d6;width:calc(19px*var(--lm-scale,1));height:calc(19px*var(--lm-scale,1));}
 .grid .lm.gate svg{width:calc(16px*var(--lm-scale,1));height:calc(16px*var(--lm-scale,1));flex:none;}
 .grid .lm.cistern{background:var(--blue);}
+.grid .lm.riser{background:#1f9bb3;}
 .grid .lm.stop{background:#8ecbf2;}
 .grid .lm.nest{background:#e4d2b2;}
 .grid .lm.lm-tl{align-self:start;justify-self:start;}
@@ -323,6 +324,15 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .lm-pad .lm-step{font-size:15px;line-height:1.05;background:#eaf3ea;border-color:#bcd6bc;}
 .lm-pad .lm-step small{font-size:10px;font-weight:600;opacity:.7;}
 .lm-ed-reset{display:block;width:100%;margin-top:8px;height:38px;border:1px solid #d9e0d9;border-radius:10px;background:#f4f7f4;font-size:13px;cursor:pointer;}
+.lm-ed-del{display:block;width:100%;margin-top:6px;height:38px;border:1px solid #f0c9c2;border-radius:10px;background:#fdeeea;color:#c0392b;font-size:13px;font-weight:600;cursor:pointer;}
+.lm-ed-del:active{filter:brightness(.96);}
+/* избор на нова иконка за картата (admin) */
+.lm-pick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.lm-pick{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid #d9e0d9;border-radius:12px;background:#f8faf8;cursor:pointer;font-size:13px;font-weight:600;color:#2f3b2f;}
+.lm-pick:active{background:#eef3ee;transform:translateY(1px);}
+.lm-pick-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.5);box-shadow:0 1px 3px rgba(0,0,0,.25);overflow:hidden;}
+.lm-pick-ico svg{width:24px;height:24px;display:block;}
+.lm-pick-ico.gate{background:#cfe8d6;} .lm-pick-ico.cistern{background:var(--blue);} .lm-pick-ico.riser{background:#1f9bb3;} .lm-pick-ico.stop{background:#8ecbf2;} .lm-pick-ico.nest{background:#e4d2b2;}
 .lm-ico{display:inline-flex;width:22px;height:22px;vertical-align:middle;}
 .lm-ico svg{width:22px;height:22px;}
 

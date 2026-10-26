@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Обиколка — лешници между външните дървета</title>
+<style>
+  body { margin:0; background:#f3f7f1; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#22402b; }
+  .wrap { max-width:780px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 2px; }
+  p.sub { margin:0 0 12px; color:#4b6b55; font-size:14px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; margin:10px 0 14px; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:14px; height:14px; border-radius:50%; display:inline-block; }
+  .big { font-size:34px; font-weight:800; color:#1c6b3a; }
+  .card { background:#fff; border:1px solid #d8e6dc; border-radius:14px; padding:14px 16px; margin:12px 0; }
+  svg { width:100%; height:auto; background:#fff; border:1px solid #d8e6dc; border-radius:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌰 Обиколка на градината — лешници между външните дървета</h1>
+  <p class="sub">Зелено = всички орехи (75). Син пръстен = най-външните дървета по обиколката. Кафяво 🌰 = лешник, посаден между две съседни външни дървета.</p>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#4caf50"></span> орех (вътрешен)</span>
+    <span><span class="dot" style="background:#4caf50;box-shadow:0 0 0 3px #1565c0"></span> най-външен орех</span>
+    <span><span class="dot" style="background:#8d5524"></span> лешник (между две външни)</span>
+  </div>
+
+  <svg id="map" viewBox="0 0 740 860" role="img" aria-label="Карта на градината"></svg>
+
+  <div class="card">
+    <div>Най-външни дървета по обиколката: <b id="perimCount">—</b></div>
+    <div>Понеже обиколката е затворен пръстен, между всяка двойка съседни външни дървета има по 1 лешник.</div>
+    <div style="margin-top:8px">Лешници накрая: <span class="big" id="hazelCount">—</span> 🌰</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ROWS = ['А','Б','В','Г','Д','Е','Ж','З','И','К','Л','М'];
+  // колоните на всеки ред (както в app/js/data.js)
+  var LAYOUT = {
+    'А':[1,2,3], 'Б':[1,2,3], 'В':[1,2,3],
+    'Г':[1,2,3,4,5,6], 'Д':[1,2,3,4,5,6],
+    'Е':[1,2,3,4,5,6,7,8,9], 'Ж':[1,2,3,4,5,6,7,8,9],
+    'З':[1,2,3,4,5,6,7,8,9], 'И':[1,2,3,4,5,6,7,8,9],
+    'К':[1,2,3,4,5,6,7,8,9], 'Л':[3,4,5,6,7,8,9], 'М':[8,9]
+  };
+
+  // Най-външната обиколка (в ред, по часовниковата стрелка) — [ред, колона]
+  var PERIM = [
+    ['А',1],['А',2],['А',3],
+    ['Б',3],['В',3],
+    ['Г',4],['Г',5],['Г',6],
+    ['Д',6],
+    ['Е',7],['Е',8],['Е',9],
+    ['Ж',9],['З',9],['И',9],['К',9],['Л',9],
+    ['М',9],['М',8],
+    ['Л',7],['Л',6],['Л',5],['Л',4],['Л',3],
+    ['К',2],['К',1],
+    ['И',1],['З',1],['Ж',1],['Е',1],['Д',1],['Г',1],['В',1],['Б',1]
+  ];
+
+  var CELL = 64, PAD = 46;
+  function X(col){ return PAD + (col-1)*CELL + CELL/2; }
+  function Y(rowIdx){ return PAD + rowIdx*CELL + CELL/2; }
+  function rowIdx(r){ return ROWS.indexOf(r); }
+
+  // код на дърво (както data.js: буква + индекс в реда + 1)
+  function code(r,col){ var i = LAYOUT[r].indexOf(col); return r + (i+1); }
+
+  function key(r,col){ return r + ':' + col; }
+  var perimSet = {};
+  PERIM.forEach(function(p){ perimSet[key(p[0],p[1])] = true; });
+
+  var svg = document.getElementById('map');
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(name, attrs){ var e = document.createElementNS(NS, name); for(var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+  // 1) всички дървета
+  ROWS.forEach(function(r){
+    LAYOUT[r].forEach(function(col){
+      var cx = X(col), cy = Y(rowIdx(r));
+      var isPerim = !!perimSet[key(r,col)];
+      svg.appendChild(el('circle', {cx:cx, cy:cy, r:16, fill:'#4caf50',
+        stroke: isPerim ? '#1565c0' : '#2e7d32', 'stroke-width': isPerim ? 4 : 1.5}));
+      var t = el('text', {x:cx, y:cy+4, 'text-anchor':'middle', 'font-size':10,
+        fill:'#fff', 'font-weight':'700'});
+      t.textContent = code(r,col);
+      svg.appendChild(t);
+    });
+  });
+
+  // 2) лешници между съседните външни дървета (затворен пръстен)
+  var n = PERIM.length;
+  for(var i=0;i<n;i++){
+    var a = PERIM[i], b = PERIM[(i+1)%n];
+    var ax = X(a[1]), ay = Y(rowIdx(a[0]));
+    var bx = X(b[1]), by = Y(rowIdx(b[0]));
+    var mx = (ax+bx)/2, my = (ay+by)/2;
+    svg.appendChild(el('line', {x1:ax,y1:ay,x2:bx,y2:by, stroke:'#c9a96a','stroke-width':2,'stroke-dasharray':'4 3', opacity:0.7}));
+    svg.appendChild(el('circle', {cx:mx, cy:my, r:11, fill:'#8d5524', stroke:'#fff','stroke-width':2}));
+    var num = el('text', {x:mx, y:my+3.5, 'text-anchor':'middle','font-size':10, fill:'#fff','font-weight':'700'});
+    num.textContent = (i+1);
+    svg.appendChild(num);
+  }
+
+  document.getElementById('perimCount').textContent = n + ' дървета';
+  document.getElementById('hazelCount').textContent = n;
+})();
+</script>
+</body>
+</html>

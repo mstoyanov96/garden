@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.5.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.6.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -687,13 +687,14 @@
   var LM_ICONS = {
     gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="5" y="4.4" width="14" height="2.2" rx="1"/><rect x="5" y="17.4" width="14" height="2.2" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
     gateUp: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.2 V8.7"/><path d="M9.3 11.6 L12 8.7 L14.7 11.6"/></g></svg>',
-    cistern: '<svg viewBox="0 0 24 24"><path d="M12 3C12 3 5 11 5 15a7 7 0 0 0 14 0C19 11 12 3 12 3Z" fill="#fff"/></svg>',
+    cistern: '<svg viewBox="0 0 24 24"><rect x="5" y="7.5" width="14" height="12.6" rx="2.6" fill="#fff"/><rect x="9.3" y="3.6" width="5.4" height="4.3" rx="1.2" fill="#fff"/><path d="M12 10.4s-3.1 3.5-3.1 5.5a3.1 3.1 0 0 0 6.2 0c0-2-3.1-5.5-3.1-5.5Z" fill="#2e86de"/></svg>',
+    riser: '<svg viewBox="0 0 24 24"><g fill="#fff"><rect x="10.2" y="12.8" width="3.6" height="8.6" rx="1"/><rect x="7.6" y="20.2" width="8.8" height="2.3" rx="1"/><path d="M12 7.4h5.5a1.4 1.4 0 0 1 1.4 1.4v3.5h-2.6v-2.3H12z"/><rect x="9.5" y="6.5" width="5" height="7.3" rx="1.4"/><rect x="10.6" y="2.3" width="2.8" height="5.1" rx="1.1"/><rect x="8.1" y="1.9" width="7.8" height="2.3" rx="1.1"/></g><path d="M17.3 14s-1.4 1.6-1.4 2.6a1.4 1.4 0 0 0 2.8 0c0-1-1.4-2.6-1.4-2.6z" fill="#cfe9ff"/></svg>',
     stop: '<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="9" rx="2.2" fill="#fff"/><g fill="#f3b53c"><rect x="5" y="8.3" width="3" height="3" rx="0.6"/><rect x="9" y="8.3" width="3" height="3" rx="0.6"/><rect x="13" y="8.3" width="3" height="3" rx="0.6"/><rect x="17" y="8.3" width="2" height="3" rx="0.6"/></g><circle cx="7.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="7.5" cy="16.3" r="0.8" fill="#f3b53c"/><circle cx="16.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="16.5" cy="16.3" r="0.8" fill="#f3b53c"/></svg>',
     nest: '<svg viewBox="0 0 24 24"><path d="M3 11c0 4 4 7 9 7s9-3 9-7Z" fill="#7a4a2f"/><ellipse cx="9.3" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/><ellipse cx="14.7" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/></svg>'
   };
-  var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', stop: 'Спирка', nest: 'Гнездо' };
+  var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', riser: 'Щранг', stop: 'Спирка', nest: 'Гнездо' };
   // стандартни цветове на значките (ползват се и за бутона „върни цвета")
-  var LM_DEFAULT_COLORS = { gate: '#cfe8d6', cistern: '#2e86de', stop: '#8ecbf2', nest: '#e4d2b2' };
+  var LM_DEFAULT_COLORS = { gate: '#cfe8d6', cistern: '#2e86de', riser: '#1f9bb3', stop: '#8ecbf2', nest: '#e4d2b2' };
   function lmColor(kind) {
     var c = db.settings && db.settings.landmarkColors && db.settings.landmarkColors[kind];
     return c || LM_DEFAULT_COLORS[kind] || '#cfe8d6';
@@ -1315,8 +1316,8 @@
       '</div>' +
       (editMode ? '' : '<div class="seg"><button class="' + (mapMode === 'health' ? 'active' : '') + '" data-action="mapmode:health">🌳 Здраве</button>' +
         '<button class="' + (mapMode === 'harvest' ? 'active' : '') + '" data-action="mapmode:harvest">🧺 Събиране</button></div>') +
-      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, площ (цветно поле) за да я наместиш, или ориентир (порта, цистерна, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
-      (editMode ? '<div class="row mb"><button class="btn secondary" data-action="addzone">➕ Добави зона</button><button class="btn secondary" data-action="addarea">🟫 Добави площ</button></div>' : '') +
+      (editMode ? '<div class="edit-bar">✏️ Режим редакция: докосни ➕ за ново дърво, дърво за да го местиш/триеш, зона (Градина, Къща…) за да ѝ смениш мястото, площ (цветно поле) за да я наместиш, или ориентир (порта, цистерна, щранг, спирка, гнездо) за да го наместиш много фино.</div>' : '') +
+      (editMode ? '<div class="row mb"><button class="btn secondary" data-action="addzone">➕ Добави зона</button><button class="btn secondary" data-action="addarea">🟫 Добави площ</button><button class="btn secondary" data-action="addlm">🚰 Добави иконка</button></div>' : '') +
       (editMode ? '' : '<div class="map-toolbar">' +
         '<select class="input" id="fVar">' + varietyOptions('', '') + '</select>' +
         (mapMode === 'health' ? '<select class="input" id="fHealth"><option value="">Всички състояния</option><option value="green">Здрави</option><option value="yellow">За грижа</option><option value="red">Болни</option></select>' : '') +
@@ -3098,6 +3099,9 @@
       case 'lmstep': toggleLmStep(); break;
       case 'lmreset': resetLandmark(parts[1]); break;
       case 'lmcolorreset': resetLandmarkColor(parts[1]); break;
+      case 'addlm': sheetAddLandmark(); break;
+      case 'newlm': addLandmark(parts[1]); break;
+      case 'dellm': deleteLandmark(parts[1]); break;
       case 'closelmeditor': closeLmEditor(); break;
       case 'togglelandmarks': setLandmarksVisible(!landmarksVisible()); render(); break;
       case 'lmscaleup': setLmScale(lmScale() + 0.1); break;
@@ -3501,6 +3505,7 @@
     editingLmId = id; editingLmKind = m.kind; editingTreeId = null;
     var name = LM_LABELS[m.kind] || 'Ориентир';
     var fine = lmStep === 'fine';
+    var isDefault = (DB.defaultLandmarks() || []).some(function (d) { return d.id === id; });
     mountFloatPanel(
       '<div class="lm-ed-head">' +
       '<span class="lm-grip">⠿</span>' +
@@ -3516,7 +3521,8 @@
       '<button data-action="lmnudge:' + id + ':right">→</button>' +
       '<span></span><button data-action="lmnudge:' + id + ':down">↓</button><span></span>' +
       '</div>' +
-      '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>');
+      (isDefault ? '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>' : '') +
+      '<button class="lm-ed-del" data-action="dellm:' + id + '">🗑️ Изтрий иконката</button>');
     updateMap();
     scrollEditingEl('.lm.lm-editing');
   }
@@ -3559,6 +3565,41 @@
     var m = lmById(id); if (!m || !isAdmin()) return;
     if (db.settings.landmarkColors) { delete db.settings.landmarkColors[m.kind]; save(); updateMap(); }
     var inp = el('lmColor'); if (inp) inp.value = LM_DEFAULT_COLORS[m.kind] || '#cfe8d6';
+  }
+
+  // Избор каква нова иконка да се сложи на картата (само админ).
+  function sheetAddLandmark() {
+    if (!isAdmin()) return;
+    var kinds = ['riser', 'cistern', 'gate', 'stop', 'nest'];
+    var items = kinds.map(function (k) {
+      var ico = (k === 'gate') ? LM_ICONS.gateUp : (LM_ICONS[k] || '');
+      return '<button class="lm-pick" data-action="newlm:' + k + '">' +
+        '<span class="lm-pick-ico ' + k + '">' + ico + '</span>' +
+        '<span>' + esc(LM_LABELS[k] || k) + '</span></button>';
+    }).join('');
+    openSheet('<h3>🚰 Добави иконка</h3>' +
+      '<p class="muted" style="font-size:13px;margin:0 0 12px">Избери каква иконка да сложиш на картата. После я премести с ← ↑ ↓ → където трябва.</p>' +
+      '<div class="lm-pick-grid">' + items + '</div>' +
+      '<button class="btn ghost mt" data-action="closesheet">Отказ</button>', true);
+  }
+
+  // Слага нова иконка в средата на картата и веднага отваря панела за наместване.
+  function addLandmark(kind) {
+    if (!isAdmin() || !LM_LABELS[kind]) return;
+    db.settings.landmarks = db.settings.landmarks || [];
+    var m = { id: DB.uid('lm'), kind: kind, anchor: 'c', gr: 4, gc: 6, dx: 0, dy: 0 };
+    if (kind === 'gate') m.dir = 'up';
+    db.settings.landmarks.push(m);
+    save(); closeSheet(); render(); sheetEditLandmark(m.id);
+  }
+
+  function deleteLandmark(id) {
+    if (!isAdmin()) return;
+    var m = lmById(id); if (!m) return;
+    var name = LM_LABELS[m.kind] || 'иконката';
+    if (!confirm('Да изтрия ли „' + name + '“ от картата?')) return;
+    db.settings.landmarks = (db.settings.landmarks || []).filter(function (x) { return x.id !== id; });
+    save(); closeLmEditor(); render();
   }
 
   // ---- Дървета — местене през същия плаващ панел -------------------------
