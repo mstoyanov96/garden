@@ -281,17 +281,11 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .grid .zone-edit,.grid .area.area-edit{z-index:8;pointer-events:auto;cursor:pointer;}
 .grid .zone-edit{outline:2px dashed rgba(31,122,67,.6);outline-offset:1px;}
 
-/* ориентири на картата (порти, цистерна, спирка, гнездо) */
+/* ориентири на картата (порти, цистерна, щранг, спирка, гнездо) — самостоятелни цветни икони */
 .grid .lm{position:relative;z-index:3;pointer-events:none;display:flex;align-items:center;justify-content:center;
   transform:translate(calc(var(--dx,0)*1px),calc(var(--dy,0)*1px));}
-.grid .lm.badge{width:calc(17px*var(--lm-scale,1));height:calc(17px*var(--lm-scale,1));border-radius:5px;border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 3px rgba(0,0,0,.28);overflow:hidden;}
-.grid .lm.badge svg{width:calc(14px*var(--lm-scale,1));height:calc(14px*var(--lm-scale,1));display:block;flex:none;}
-.grid .lm.gate{background:#cfe8d6;width:calc(19px*var(--lm-scale,1));height:calc(19px*var(--lm-scale,1));}
-.grid .lm.gate svg{width:calc(16px*var(--lm-scale,1));height:calc(16px*var(--lm-scale,1));flex:none;}
-.grid .lm.cistern{background:var(--blue);}
-.grid .lm.riser{background:#1f9bb3;}
-.grid .lm.stop{background:#8ecbf2;}
-.grid .lm.nest{background:#e4d2b2;}
+.grid .lm svg{width:calc(26px*var(--lm-scale,1)*var(--lm-sc,1));height:calc(26px*var(--lm-scale,1)*var(--lm-sc,1));
+  display:block;flex:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
 .grid .lm.lm-tl{align-self:start;justify-self:start;}
 .grid .lm.lm-r{align-self:center;justify-self:end;}
 .grid .lm.lm-re{align-self:start;justify-self:end;}
@@ -330,9 +324,14 @@ textarea.input{height:auto;padding:12px 14px;min-height:84px;resize:vertical;}
 .lm-pick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .lm-pick{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid #d9e0d9;border-radius:12px;background:#f8faf8;cursor:pointer;font-size:13px;font-weight:600;color:#2f3b2f;}
 .lm-pick:active{background:#eef3ee;transform:translateY(1px);}
-.lm-pick-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.5);box-shadow:0 1px 3px rgba(0,0,0,.25);overflow:hidden;}
-.lm-pick-ico svg{width:24px;height:24px;display:block;}
-.lm-pick-ico.gate{background:#cfe8d6;} .lm-pick-ico.cistern{background:var(--blue);} .lm-pick-ico.riser{background:#1f9bb3;} .lm-pick-ico.stop{background:#8ecbf2;} .lm-pick-ico.nest{background:#e4d2b2;}
+.lm-pick-ico{width:42px;height:42px;display:flex;align-items:center;justify-content:center;}
+.lm-pick-ico svg{width:38px;height:38px;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));}
+/* контрол за големина на иконка в плаващия панел */
+.lm-size{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;font-size:13px;}
+.lm-size span{color:#6b756b;}
+.lm-size button{width:40px;height:36px;border:1px solid #cdd6cd;border-radius:10px;background:#f6f9f6;font-size:19px;font-weight:700;cursor:pointer;}
+.lm-size button:active{background:#e6efe6;transform:translateY(1px);}
+.lm-size b{min-width:48px;text-align:center;}
 .lm-ico{display:inline-flex;width:22px;height:22px;vertical-align:middle;}
 .lm-ico svg{width:22px;height:22px;}
 

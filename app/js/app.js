@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.6.0';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.6.1';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -687,11 +687,14 @@
   var LM_ICONS = {
     gate: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="5" y="4.4" width="14" height="2.2" rx="1"/><rect x="5" y="17.4" width="14" height="2.2" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12 H15"/><path d="M12.3 9.3 L15.2 12 L12.3 14.7"/></g></svg>',
     gateUp: '<svg viewBox="0 0 24 24"><g fill="#1f7a43"><rect x="4.4" y="5" width="2.2" height="14" rx="1"/><rect x="17.4" y="5" width="2.2" height="14" rx="1"/></g><g fill="none" stroke="#1f7a43" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.2 V8.7"/><path d="M9.3 11.6 L12 8.7 L14.7 11.6"/></g></svg>',
-    cistern: '<svg viewBox="0 0 24 24"><rect x="5" y="7.5" width="14" height="12.6" rx="2.6" fill="#fff"/><rect x="9.3" y="3.6" width="5.4" height="4.3" rx="1.2" fill="#fff"/><path d="M12 10.4s-3.1 3.5-3.1 5.5a3.1 3.1 0 0 0 6.2 0c0-2-3.1-5.5-3.1-5.5Z" fill="#2e86de"/></svg>',
-    riser: '<svg viewBox="0 0 24 24"><g fill="#fff"><rect x="10.2" y="12.8" width="3.6" height="8.6" rx="1"/><rect x="7.6" y="20.2" width="8.8" height="2.3" rx="1"/><path d="M12 7.4h5.5a1.4 1.4 0 0 1 1.4 1.4v3.5h-2.6v-2.3H12z"/><rect x="9.5" y="6.5" width="5" height="7.3" rx="1.4"/><rect x="10.6" y="2.3" width="2.8" height="5.1" rx="1.1"/><rect x="8.1" y="1.9" width="7.8" height="2.3" rx="1.1"/></g><path d="M17.3 14s-1.4 1.6-1.4 2.6a1.4 1.4 0 0 0 2.8 0c0-1-1.4-2.6-1.4-2.6z" fill="#cfe9ff"/></svg>',
-    stop: '<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="9" rx="2.2" fill="#fff"/><g fill="#f3b53c"><rect x="5" y="8.3" width="3" height="3" rx="0.6"/><rect x="9" y="8.3" width="3" height="3" rx="0.6"/><rect x="13" y="8.3" width="3" height="3" rx="0.6"/><rect x="17" y="8.3" width="2" height="3" rx="0.6"/></g><circle cx="7.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="7.5" cy="16.3" r="0.8" fill="#f3b53c"/><circle cx="16.5" cy="16.3" r="1.9" fill="#fff"/><circle cx="16.5" cy="16.3" r="0.8" fill="#f3b53c"/></svg>',
-    nest: '<svg viewBox="0 0 24 24"><path d="M3 11c0 4 4 7 9 7s9-3 9-7Z" fill="#7a4a2f"/><ellipse cx="9.3" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/><ellipse cx="14.7" cy="10.6" rx="2.3" ry="1.9" fill="#fff"/></svg>'
+    cistern: '<svg viewBox="0 0 24 24"><path d="M6.8 7h10.4a2 2 0 0 1 2 2v8.6A3.4 3.4 0 0 1 15.8 21H8.2a3.4 3.4 0 0 1-3.4-3.4V9a2 2 0 0 1 2-2Z" fill="#3b8fe6"/><path d="M6.8 7h10.4a2 2 0 0 1 2 2v1.6H4.8V9a2 2 0 0 1 2-2Z" fill="#5aa6f0"/><rect x="9.3" y="2.7" width="5.4" height="4.6" rx="1.4" fill="#2f7fd1"/><path d="M12 10.8s-3 3.3-3 5.2a3 3 0 0 0 6 0c0-1.9-3-5.2-3-5.2Z" fill="#eaf4ff"/></svg>',
+    riser: '<svg viewBox="0 0 24 24"><g fill="#3b8fe6"><rect x="10.2" y="12.4" width="3.6" height="9" rx="1"/><rect x="7.3" y="20.4" width="9.4" height="2.4" rx="1.1"/><path d="M12 7h5.7a1.5 1.5 0 0 1 1.5 1.5v3.7h-2.8v-2.5H12z"/><rect x="9.3" y="6" width="5.4" height="7.8" rx="1.5"/><rect x="10.5" y="1.8" width="3" height="5.4" rx="1.2"/><rect x="7.8" y="1.4" width="8.4" height="2.4" rx="1.2"/></g><path d="M17.5 14.1s-1.5 1.7-1.5 2.7a1.5 1.5 0 0 0 3 0c0-1-1.5-2.7-1.5-2.7z" fill="#7fc0f6"/></svg>',
+    stop: '<svg viewBox="0 0 24 24"><rect x="3.3" y="5.3" width="17.4" height="10.8" rx="2.6" fill="#f3a53c"/><g fill="#fff"><rect x="5.2" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="9.3" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="13.4" y="7.4" width="3.2" height="3.5" rx="0.7"/><rect x="17.2" y="7.4" width="1.6" height="3.5" rx="0.6"/></g><rect x="3.7" y="12.3" width="16.6" height="1.5" fill="#dd8c22"/><circle cx="7.4" cy="17" r="2.4" fill="#39404a"/><circle cx="7.4" cy="17" r="0.9" fill="#fff"/><circle cx="16.6" cy="17" r="2.4" fill="#39404a"/><circle cx="16.6" cy="17" r="0.9" fill="#fff"/></svg>',
+    nest: '<svg viewBox="0 0 24 24"><path d="M2.5 10.3c0 4.5 4.3 7.7 9.5 7.7s9.5-3.2 9.5-7.7Z" fill="#8a5a33"/><path d="M2.5 10.3h19c0 1.4-.4 2.6-1.2 3.7H3.7c-.8-1.1-1.2-2.3-1.2-3.7Z" fill="#9e6b3f"/><ellipse cx="9" cy="9.9" rx="2.5" ry="2.1" fill="#f4ecda"/><ellipse cx="14.6" cy="10.1" rx="2.5" ry="2.1" fill="#f4ecda"/></svg>'
   };
+  var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', riser: 'Щранг', stop: 'Спирка', nest: 'Гнездо' };
+  // стандартни цветове на значките (ползват се и за бутона „върни цвета")
+  var LM_DEFAULT_COLORS = { gate: '#cfe8d6', cistern: '#2e86de', riser: '#1f9bb3', stop: '#8ecbf2', nest: '#e4d2b2' };
   var LM_LABELS = { gate: 'Порта', cistern: 'Цистерна', riser: 'Щранг', stop: 'Спирка', nest: 'Гнездо' };
   // стандартни цветове на значките (ползват се и за бутона „върни цвета")
   var LM_DEFAULT_COLORS = { gate: '#cfe8d6', cistern: '#2e86de', riser: '#1f9bb3', stop: '#8ecbf2', nest: '#e4d2b2' };
@@ -728,10 +731,10 @@
       var ed = edit ? ' editable' : '';
       var hledit = (m.id === editingLmId) ? ' lm-editing' : '';
       var dx = m.dx || 0, dy = m.dy || 0;
-      var col = (db.settings.landmarkColors && db.settings.landmarkColors[m.kind]) ? ';background:' + db.settings.landmarkColors[m.kind] : '';
+      var sc = (typeof m.sc === 'number' && m.sc > 0) ? m.sc : 1;
       var icon = (m.kind === 'gate' && m.dir === 'up') ? LM_ICONS.gateUp : (LM_ICONS[m.kind] || '');
-      return '<div class="lm badge ' + m.kind + ' lm-' + (m.anchor || 'c') + ed + hledit + '"' + act +
-        ' style="grid-row:' + m.gr + ';grid-column:' + m.gc + ' / span 2;--dx:' + dx + ';--dy:' + dy + col + '">' +
+      return '<div class="lm ' + m.kind + ' lm-' + (m.anchor || 'c') + ed + hledit + '"' + act +
+        ' style="grid-row:' + m.gr + ';grid-column:' + m.gc + ' / span 2;--dx:' + dx + ';--dy:' + dy + ';--lm-sc:' + sc + '">' +
         icon + '</div>';
     }).join('');
   }
@@ -3097,6 +3100,7 @@
       case 'editlm': sheetEditLandmark(parts[1]); break;
       case 'lmnudge': nudgeLandmark(parts[1], parts[2]); break;
       case 'lmstep': toggleLmStep(); break;
+      case 'lmsize': sizeLandmark(parts[1], parts[2]); break;
       case 'lmreset': resetLandmark(parts[1]); break;
       case 'lmcolorreset': resetLandmarkColor(parts[1]); break;
       case 'addlm': sheetAddLandmark(); break;
@@ -3505,13 +3509,12 @@
     editingLmId = id; editingLmKind = m.kind; editingTreeId = null;
     var name = LM_LABELS[m.kind] || 'Ориентир';
     var fine = lmStep === 'fine';
+    var sc = (typeof m.sc === 'number' && m.sc > 0) ? m.sc : 1;
     var isDefault = (DB.defaultLandmarks() || []).some(function (d) { return d.id === id; });
     mountFloatPanel(
       '<div class="lm-ed-head">' +
       '<span class="lm-grip">⠿</span>' +
-      '<span class="lm-ed-title">' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + LM_ICONS[m.kind] + '</span>' : '') + esc(name) + '</span>' +
-      '<label class="lm-ed-color"><input id="lmColor" type="color" value="' + lmColor(m.kind) + '"/></label>' +
-      '<button class="lm-ed-btn" data-action="lmcolorreset:' + id + '" title="Стандартен цвят">🎨↺</button>' +
+      '<span class="lm-ed-title">' + (LM_ICONS[m.kind] ? '<span class="lm-ico">' + (m.kind === 'gate' && m.dir === 'up' ? LM_ICONS.gateUp : LM_ICONS[m.kind]) + '</span>' : '') + esc(name) + '</span>' +
       '<button class="lm-ed-close" data-action="closelmeditor" aria-label="Затвори">✕</button>' +
       '</div>' +
       '<div class="lm-pad">' +
@@ -3521,6 +3524,10 @@
       '<button data-action="lmnudge:' + id + ':right">→</button>' +
       '<span></span><button data-action="lmnudge:' + id + ':down">↓</button><span></span>' +
       '</div>' +
+      '<div class="lm-size"><span>Големина</span>' +
+      '<button data-action="lmsize:' + id + ':minus" aria-label="По-малко">−</button>' +
+      '<b>' + Math.round(sc * 100) + '%</b>' +
+      '<button data-action="lmsize:' + id + ':plus" aria-label="По-голямо">+</button></div>' +
       (isDefault ? '<button class="lm-ed-reset" data-action="lmreset:' + id + '">↺ Върни стандартното място</button>' : '') +
       '<button class="lm-ed-del" data-action="dellm:' + id + '">🗑️ Изтрий иконката</button>');
     updateMap();
@@ -3554,6 +3561,15 @@
   function toggleLmStep() {
     lmStep = lmStep === 'fine' ? 'coarse' : 'fine';
     if (editingLmId) sheetEditLandmark(editingLmId);
+  }
+
+  // Големина на отделна иконка (0.6–2.6×), независимо от останалите.
+  function sizeLandmark(id, how) {
+    var m = lmById(id); if (!m || !isAdmin()) return;
+    var cur = (typeof m.sc === 'number' && m.sc > 0) ? m.sc : 1;
+    var v = how === 'plus' ? cur + 0.15 : cur - 0.15;
+    m.sc = Math.max(0.6, Math.min(2.6, Math.round(v * 100) / 100));
+    save(); updateMap(); sheetEditLandmark(id);
   }
 
   function resetLandmark(id) {
