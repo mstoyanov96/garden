@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.6.4';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
+  var APP_VERSION = '2.6.5';   // ← при нова версия: увеличи тук И в service-worker.js (VERSION)
   var db = DB.load();
   var route = { name: 'login', param: null };
   var harvestDraft = {};   // { treeId: {bucketId: count} } за текущата сесия събиране
@@ -3555,7 +3555,31 @@
     else if (dir === 'down') m.dy = (m.dy || 0) + step;
     else if (dir === 'left') m.dx = (m.dx || 0) - step;
     else if (dir === 'right') m.dx = (m.dx || 0) + step;
+    lmRebase(m);
     save(); updateMap(); scrollEditingEl('.lm.lm-editing');
+  }
+
+  // dx/dy са в пиксели и не се мащабират с екрана — големите отмествания се превръщат
+  // в смяна на клетка (gr/gc), за да остане иконката на същото място на всеки телефон.
+  function lmRebase(m) {
+    var g = document.querySelector('#mapwrap .grid');
+    if (!g) return;
+    var cs = getComputedStyle(g);
+    var cols = cs.gridTemplateColumns.split(' ').map(parseFloat);
+    var rows = cs.gridTemplateRows.split(' ').map(parseFloat);
+    var cg = parseFloat(cs.columnGap) || 0, rg = parseFloat(cs.rowGap) || 0;
+    var px = (cols[1] || 0) + cg;
+    if (px > 0) {
+      while (m.dx > px / 2 && m.gc + 1 < cols.length) { m.gc++; m.dx -= px; }
+      while (m.dx < -px / 2 && m.gc > 2) { m.gc--; m.dx += px; }
+    }
+    for (var i = 0; i < 100; i++) {
+      var down = (rows[m.gr - 1] || 0) + rg, up = (rows[m.gr - 2] || 0) + rg;
+      if (m.dy > down / 2 && m.gr < rows.length && down > rg) { m.gr++; m.dy -= down; }
+      else if (m.dy < -up / 2 && m.gr > 2 && up > rg) { m.gr--; m.dy += up; }
+      else break;
+    }
+    m.dx = Math.round(m.dx); m.dy = Math.round(m.dy);
   }
 
   function toggleLmStep() {
